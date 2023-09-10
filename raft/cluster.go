@@ -13,6 +13,7 @@ type Cluster struct {
 func MakeAndStartNewCluster(t *testing.T, size int) *Cluster {
 	servers := make([]*Server, size)
 	isConnected := make([]bool, size)
+	isReadyToStart := make(chan interface{})
 
 	// create servers and start them
 	for i := 0; i < size; i++ {
@@ -22,7 +23,7 @@ func MakeAndStartNewCluster(t *testing.T, size int) *Cluster {
 				peersIds = append(peersIds, peerId)
 			}
 		}
-		servers[i] = MakeNewServer(i, peersIds)
+		servers[i] = MakeNewServer(i, peersIds, isReadyToStart)
 		servers[i].Start()
 	}
 
@@ -38,6 +39,11 @@ func MakeAndStartNewCluster(t *testing.T, size int) *Cluster {
 		}
 		isConnected[i] = true
 	}
+
+	// Signal readiness by closing the isReadyToStart channel
+	// So each node can start its main loop after they are all connected
+	// Else would cause server not found error during intialization
+	close(isReadyToStart)
 
 	return &Cluster{
 		cluster:     servers,

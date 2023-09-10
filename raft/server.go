@@ -27,13 +27,16 @@ type Server struct {
 	listener  net.Listener
 
 	peerIdToClientsMapping map[int]*rpc.Client
+
+	isReadyToStart <-chan interface{}
 }
 
-func MakeNewServer(serverId int, peersIds []int) *Server {
+func MakeNewServer(serverId int, peersIds []int, isReadyToStart <-chan interface{}) *Server {
 	return &Server{
 		serverId:               serverId,
 		peerIds:                peersIds,
 		peerIdToClientsMapping: make(map[int]*rpc.Client),
+		isReadyToStart:         isReadyToStart,
 	}
 }
 
@@ -41,7 +44,7 @@ func (s *Server) Start() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.node = MakeNewNode(s.serverId, s.peerIds, s)
+	s.node = MakeNewNode(s.serverId, s.peerIds, s, s.isReadyToStart)
 
 	s.rpcServer = rpc.NewServer()
 	s.rpcProxy = &RPCProxy{s.node}
@@ -126,7 +129,10 @@ func (s *Server) DisconnectFromAll() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for peerId := range s.peerIdToClientsMapping {
-		s.DisconnectFrom(peerId)
+		err := s.DisconnectFrom(peerId)
+		if err != nil {
+			panic(err)
+		}
 	}
 }
 

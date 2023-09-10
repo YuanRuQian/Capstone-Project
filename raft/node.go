@@ -326,7 +326,7 @@ func getElectionTimeout() time.Duration {
 	return time.Duration(150+rand.Int()%151) * time.Millisecond
 }
 
-func MakeNewNode(id int, peersIds []int, server *Server) *Node {
+func MakeNewNode(id int, peersIds []int, server *Server, isReadyToStart <-chan interface{}) *Node {
 	node := &Node{
 		id:          id,
 		peersIds:    peersIds,
@@ -338,10 +338,14 @@ func MakeNewNode(id int, peersIds []int, server *Server) *Node {
 	}
 
 	go func() {
+		// This goroutine blocks until a value is received on isReadyToStart channel
+		// It won't proceed until the channel is closed
+		<-isReadyToStart
 		node.mu.Lock()
 		node.lastElectionTimerResetTime = time.Now()
 		node.mu.Unlock()
 		node.startElection()
+		DebuggerLog("Node %v: Received the ready signal, now proceed.", node.id)
 	}()
 
 	return node
