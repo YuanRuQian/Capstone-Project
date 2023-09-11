@@ -4,9 +4,11 @@ package raft
 
 import (
 	"fmt"
+	"math/rand"
 	"net"
 	"net/rpc"
 	"sync"
+	"time"
 )
 
 type RPCProxy struct {
@@ -29,6 +31,10 @@ type Server struct {
 	peerIdToClientsMapping map[int]*rpc.Client
 
 	isReadyToStart <-chan interface{}
+
+	shouldQuit chan interface{}
+
+	waitGroup sync.WaitGroup
 }
 
 func MakeNewServer(serverId int, peersIds []int, isReadyToStart <-chan interface{}) *Server {
@@ -37,12 +43,12 @@ func MakeNewServer(serverId int, peersIds []int, isReadyToStart <-chan interface
 		peerIds:                peersIds,
 		peerIdToClientsMapping: make(map[int]*rpc.Client),
 		isReadyToStart:         isReadyToStart,
+		shouldQuit:             make(chan interface{}),
 	}
 }
 
 func (s *Server) Start() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	s.node = MakeNewNode(s.serverId, s.peerIds, s, s.isReadyToStart)
 
@@ -64,11 +70,37 @@ func (s *Server) Start() {
 	}
 
 	DebuggerLog("Server %v started at %v", s.serverId, s.listener.Addr())
+	s.mu.Unlock()
 
+	s.waitGroup.Add(1)
+
+	go func() {
+		defer s.waitGroup.Done()
+
+		for {
+			conn, err := s.listener.Accept()
+			if err != nil {
+				select {
+				case <-s.shouldQuit:
+					return
+				default:
+					DebuggerLog("Error in accepting connection: %v", err)
+					panic(err)
+				}
+			}
+			s.waitGroup.Add(1)
+			go func() {
+				s.rpcServer.ServeConn(conn)
+				s.waitGroup.Done()
+			}()
+		}
+	}()
 }
 
 func (s *Server) Kill() {
+	DebuggerLog("Begin Server %v kill", s.serverId)
 	s.node.Kill()
+	close(s.shouldQuit)
 	err := s.listener.Close()
 	if err != nil {
 		DebuggerLog("Error in closing listener: %v", err)
@@ -91,11 +123,13 @@ func (s *Server) Call(id int, serviceMethod string, args interface{}, reply inte
 
 // RequestVote delegate RPC RequestVote calls to the associated node
 func (proxy *RPCProxy) RequestVote(args RequestVoteArgs, reply *RequestVoteReply) error {
+	time.Sleep(time.Duration(1+rand.Intn(5)) * time.Millisecond)
 	return proxy.node.RequestVote(args, reply)
 }
 
 // AppendEntries delegate RPC AppendEntries calls to the associated node
 func (proxy *RPCProxy) AppendEntries(args AppendEntriesArgs, reply *AppendEntriesReply) error {
+	time.Sleep(time.Duration(1+rand.Intn(5)) * time.Millisecond)
 	return proxy.node.AppendEntries(args, reply)
 }
 
@@ -108,7 +142,6 @@ func (s *Server) ConnectTo(peerId int, addr net.Addr) error {
 			return err
 		}
 		s.peerIdToClientsMapping[peerId] = client
-		DebuggerLog("Server %v connected to %v", s.serverId, peerId)
 	}
 	return nil
 }
@@ -131,15 +164,12 @@ func (s *Server) DisconnectFromAll() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for peerId := range s.peerIdToClientsMapping {
-		err := s.DisconnectFrom(peerId)
-		if err != nil {
-			panic(err)
+		if s.peerIdToClientsMapping[peerId] != nil {
+			err := s.peerIdToClientsMapping[peerId].Close()
+			if err != nil {
+				panic(err)
+			}
+			s.peerIdToClientsMapping[peerId] = nil
 		}
 	}
-}
-
-func (s *Server) GetIDTermIsLeader() (int, int, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.node.currentTerm, s.node.id, s.node.state == Leader
 }

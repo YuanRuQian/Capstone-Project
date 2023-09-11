@@ -55,14 +55,20 @@ func MakeAndStartNewCluster(t *testing.T, size int) *Cluster {
 }
 
 func (c *Cluster) KillAll() {
+	DebuggerLog("Begin KillAll")
+
 	for i := 0; i < c.size; i++ {
 		c.cluster[i].DisconnectFromAll()
 		c.isConnected[i] = false
 	}
 
+	DebuggerLog("KillAll : Disconnected all servers")
+
 	for i := 0; i < c.size; i++ {
 		c.cluster[i].Kill()
 	}
+
+	DebuggerLog("End KillAll")
 }
 
 func (c *Cluster) DisconnectServerFromPeers(serverId int) {
@@ -102,7 +108,7 @@ func (c *Cluster) GetLeaderIDAndTerm() (int, int) {
 
 		for i := 0; i < c.size; i++ {
 			if c.isConnected[i] {
-				_, term, isLeader := c.cluster[i].GetIDTermIsLeader()
+				_, term, isLeader := c.cluster[i].node.GetIDTermIsLeader()
 				if isLeader {
 					if leaderId != -1 {
 						DebuggerLog("GetLeaderIDAndTerm : %v is already leader", i)

@@ -22,7 +22,7 @@ const (
 // TODO: Check synchronization when launching goroutines to perform tasks concurrently
 
 const (
-	HeartbeatInterval = 30
+	HeartbeatInterval = 50
 )
 
 const (
@@ -56,9 +56,12 @@ type Node struct {
 
 func (n *Node) startElectionTimer() {
 	electionTimeout := getElectionTimeout()
+
 	n.mu.Lock()
 	termStarted := n.currentTerm
 	n.mu.Unlock()
+
+	DebuggerLog("Node %v: Election timer started with timeout %v at term %v", n.id, electionTimeout, n.currentTerm)
 
 	statusCheckTicker := time.NewTicker(10 * time.Millisecond)
 	defer statusCheckTicker.Stop()
@@ -66,7 +69,7 @@ func (n *Node) startElectionTimer() {
 		<-statusCheckTicker.C
 		n.mu.Lock()
 
-		if !(n.state == Candidate || n.state == Follower) {
+		if n.state != Candidate && n.state != Follower {
 			n.mu.Unlock()
 			DebuggerLog("Node %v: Election timer stopped because it is not in Candidate or Follower state", n.id)
 			return
@@ -78,11 +81,9 @@ func (n *Node) startElectionTimer() {
 			return
 		}
 
-		timePassedSinceLastReset := time.Since(n.lastElectionTimerResetTime)
-		if timePassedSinceLastReset >= electionTimeout {
-			DebuggerLog("Node %v: Election timer timed out", n.id)
-			n.mu.Unlock()
+		if timePassedSinceLastReset := time.Since(n.lastElectionTimerResetTime); timePassedSinceLastReset >= electionTimeout {
 			n.startElection()
+			n.mu.Unlock()
 			return
 		}
 
@@ -109,8 +110,9 @@ type RequestVoteReply struct {
 }
 
 func (n *Node) startElection() {
-	n.mu.Lock()
-	DebuggerLog("Node %v: Election started", n.id)
+
+	// the following fields are accessed by startElectionTimer() which recursively call startElection()
+	// so we don't need to lock them here or else we will have deadlock
 
 	n.state = Candidate
 	n.currentTerm++
@@ -122,6 +124,8 @@ func (n *Node) startElection() {
 
 	votesReceived := 1
 
+	DebuggerLog("Node %v: New election started, transition to candidate at term %v", n.id, startedTerm)
+
 	for _, peerId := range n.peersIds {
 		go func(peerId int) {
 			args := RequestVoteArgs{
@@ -131,20 +135,21 @@ func (n *Node) startElection() {
 
 			reply := RequestVoteReply{}
 
-			DebuggerLog("Node %v: Sending RequestVote to Node %v", n.id, peerId)
+			DebuggerLog("Node %v: Sending RequestVote to Node %v : %+v", n.id, peerId, args)
 
-			if err := n.server.Call(peerId, "Node.RequestVote", args, &reply); err != nil {
-				DebuggerLog("Node %v: Error while sending RequestVote to Node %v: %v", n.id, peerId, err)
+			if err := n.server.Call(peerId, "Node.RequestVote", args, &reply); err == nil {
 
 				n.mu.Lock()
 				defer n.mu.Unlock()
+
+				DebuggerLog("Node %v: Received RequestVote reply from Node %v: %+v", n.id, peerId, reply)
 
 				if n.state != Candidate {
 					DebuggerLog("Node %v: Node %v is not a candidate anymore", n.id, peerId)
 					return
 				}
 
-				if reply.Term > n.currentTerm {
+				if reply.Term > startedTerm {
 					DebuggerLog("Node %v: Node %v has a higher term, converting to follower", n.id, peerId)
 					n.transitionToFollower(reply.Term)
 					return
@@ -165,23 +170,24 @@ func (n *Node) startElection() {
 	}
 
 	// just in case nobody has won, start a new election
-	n.startElectionTimer()
+	go n.startElectionTimer()
 }
 
 func (n *Node) transitionToFollower(term int) {
-	n.mu.Lock()
+
+	DebuggerLog("Node %v: Transitioning to follower at term %v", n.id, term)
 	n.state = Follower
 	n.currentTerm = term
 	n.voteForId = -1
 	n.lastElectionTimerResetTime = time.Now()
-	n.mu.Unlock()
 
-	go n.startElection()
+	go n.startElectionTimer()
 }
 
 func (n *Node) transitionToLeader() {
 	n.mu.Lock()
 	n.state = Leader
+	DebuggerLog("Node %v: Transitioning to leader", n.id)
 	n.mu.Unlock()
 
 	go func() {
@@ -256,14 +262,14 @@ func (n *Node) RequestVote(args RequestVoteArgs, reply *RequestVoteReply) error 
 		return nil
 	}
 
-	DebuggerLog("Node %v: RequestVote received: %v", n.id, args)
+	DebuggerLog("Node %v: RequestVote received: %+v", n.id, args)
 
 	if args.Term > n.currentTerm {
+		DebuggerLog("Node %v: RequestVote received with higher term %v", n.id, args.Term)
 		n.transitionToFollower(args.Term)
 	}
 
-	ifCouldVote := n.voteForId == -1 || n.voteForId == args.CandidateId
-	if args.Term == n.currentTerm && ifCouldVote {
+	if args.Term == n.currentTerm && (n.voteForId == -1 || n.voteForId == args.CandidateId) {
 		n.voteForId = args.CandidateId
 		reply.VoteGranted = true
 		n.lastElectionTimerResetTime = time.Now()
@@ -289,6 +295,7 @@ func (n *Node) AppendEntries(args AppendEntriesArgs, reply *AppendEntriesReply) 
 
 	if args.Term > n.currentTerm {
 		// there is a new leader / incoming entries have new content
+		DebuggerLog("Node %v: AppendEntries received with higher term %v, transition to follower state", n.id, args.Term)
 		n.transitionToFollower(args.Term)
 	}
 
@@ -309,10 +316,18 @@ func (n *Node) AppendEntries(args AppendEntriesArgs, reply *AppendEntriesReply) 
 }
 
 func (n *Node) Kill() {
+	DebuggerLog("Inside Node %v: Killing", n.id)
 	n.mu.Lock()
 	defer n.mu.Unlock()
+	DebuggerLog("After begin Node %v: Killing, state is %v", n.id, n.state)
 	n.state = Dead
 	DebuggerLog("Node %v: Killed", n.id)
+}
+
+func (n *Node) GetIDTermIsLeader() (int, int, bool) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.id, n.currentTerm, n.state == Leader
 }
 
 func DebuggerLog(format string, a ...interface{}) {
@@ -328,13 +343,11 @@ func getElectionTimeout() time.Duration {
 
 func MakeNewNode(id int, peersIds []int, server *Server, isReadyToStart <-chan interface{}) *Node {
 	node := &Node{
-		id:          id,
-		peersIds:    peersIds,
-		server:      server,
-		currentTerm: 0,
-		voteForId:   -1,
-		logs:        make([]LogEntry, 0),
-		state:       Follower, // Initial state is Follower
+		id:        id,
+		peersIds:  peersIds,
+		server:    server,
+		state:     Follower,
+		voteForId: -1,
 	}
 
 	go func() {
@@ -344,8 +357,7 @@ func MakeNewNode(id int, peersIds []int, server *Server, isReadyToStart <-chan i
 		node.mu.Lock()
 		node.lastElectionTimerResetTime = time.Now()
 		node.mu.Unlock()
-		node.startElection()
-		DebuggerLog("Node %v: Received the ready signal, now proceed.", node.id)
+		node.startElectionTimer()
 	}()
 
 	return node
