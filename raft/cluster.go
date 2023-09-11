@@ -2,6 +2,7 @@ package raft
 
 import (
 	"testing"
+	"time"
 )
 
 type Cluster struct {
@@ -17,8 +18,9 @@ func MakeAndStartNewCluster(t *testing.T, size int) *Cluster {
 
 	// create servers and start them
 	for i := 0; i < size; i++ {
-		peersIds := make([]int, size)
+		peersIds := make([]int, 0)
 		for peerId := 0; peerId < size; peerId++ {
+			// for peers, exclude self
 			if peerId != i {
 				peersIds = append(peersIds, peerId)
 			}
@@ -68,7 +70,10 @@ func (c *Cluster) DisconnectServerFromPeers(serverId int) {
 
 	for i := 0; i < c.size; i++ {
 		if i != serverId {
-			c.cluster[i].DisconnectFrom(serverId)
+			err := c.cluster[i].DisconnectFrom(serverId)
+			if err != nil {
+				return
+			}
 		}
 	}
 
@@ -89,21 +94,37 @@ func (c *Cluster) ConnectServerToPeers(serverId int) {
 }
 
 func (c *Cluster) GetLeaderIDAndTerm() (int, int) {
-	leaderId := -1
-	leaderTerm := -1
 
-	for i := 0; i < c.size; i++ {
-		if c.isConnected[i] {
-			_, term, isLeader := c.cluster[i].GetIDTermIsLeader()
-			if isLeader {
-				if leaderId != -1 {
-					panic("More than one leader")
+	for attempts := 0; attempts < 10; attempts++ {
+
+		leaderId := -1
+		leaderTerm := -1
+
+		for i := 0; i < c.size; i++ {
+			if c.isConnected[i] {
+				_, term, isLeader := c.cluster[i].GetIDTermIsLeader()
+				if isLeader {
+					if leaderId != -1 {
+						DebuggerLog("GetLeaderIDAndTerm : %v is already leader", i)
+					}
+					leaderId = i
+					leaderTerm = term
 				}
-				leaderId = i
-				leaderTerm = term
 			}
 		}
+
+		if leaderId > 0 {
+			DebuggerLog("GetLeaderIDAndTerm : Leader is %v, term is %v", leaderId, leaderTerm)
+			return leaderId, leaderTerm
+		}
+
+		c.Sleep(150)
 	}
 
-	return leaderId, leaderTerm
+	panic("No leader found")
+	return -1, -1
+}
+
+func (c *Cluster) Sleep(i int) {
+	time.Sleep(time.Duration(i) * time.Millisecond)
 }

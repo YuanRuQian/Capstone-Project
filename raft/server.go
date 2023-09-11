@@ -108,6 +108,7 @@ func (s *Server) ConnectTo(peerId int, addr net.Addr) error {
 			return err
 		}
 		s.peerIdToClientsMapping[peerId] = client
+		DebuggerLog("Server %v connected to %v", s.serverId, peerId)
 	}
 	return nil
 }
@@ -121,6 +122,7 @@ func (s *Server) DisconnectFrom(peerId int) error {
 			return err
 		}
 		s.peerIdToClientsMapping[peerId] = nil
+		DebuggerLog("Server %v disconnected from %v", s.serverId, peerId)
 	}
 	return nil
 }
