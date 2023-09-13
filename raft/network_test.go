@@ -2,9 +2,9 @@ package raft
 
 import "testing"
 
-func TestBasics(t *testing.T) {
-	cluster := MakeAndStartNewCluster(t, 3)
+func TestLeaderElection(t *testing.T) {
+	cluster := MakeAndStartNewCluster(t, 5)
 	defer cluster.KillAll()
 
-	cluster.GetLeaderIDAndTerm()
+	cluster.GetSingleLeaderInfo()
 }

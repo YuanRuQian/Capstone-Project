@@ -156,7 +156,8 @@ func (n *Node) startElection() {
 				} else if reply.Term == startedTerm {
 					if reply.VoteGranted {
 						votesReceived++
-						if votesReceived > len(n.peersIds)/2 {
+						// Don't forget to count itself when it comes to the strict majority of the whole cluster! Peers only count from other peers.
+						if votesReceived > (len(n.peersIds)+1)/2 {
 							DebuggerLog("Node %v: Received majority votes, converting to leader", n.id)
 							n.transitionToLeader()
 							return
@@ -185,10 +186,9 @@ func (n *Node) transitionToFollower(term int) {
 }
 
 func (n *Node) transitionToLeader() {
-	n.mu.Lock()
+
 	n.state = Leader
 	DebuggerLog("Node %v: Transitioning to leader", n.id)
-	n.mu.Unlock()
 
 	go func() {
 		heartbeatTicker := time.NewTicker(HeartbeatInterval * time.Millisecond)
@@ -238,7 +238,7 @@ func (n *Node) sendHeartbeats() {
 			LeaderId: n.id,
 		}
 		go func(peerId int) {
-			DebuggerLog("sending AppendEntries to %v: ni=%d, args=%+v", peerId, 0, args)
+			DebuggerLog("Sending AppendEntries to Node %v: ni=%d, args=%+v", peerId, 0, args)
 			reply := AppendEntriesReply{}
 			if err := n.server.Call(peerId, "Node.AppendEntries", args, &reply); err == nil {
 				n.mu.Lock()

@@ -99,9 +99,9 @@ func (c *Cluster) ConnectServerToPeers(serverId int) {
 	c.isConnected[serverId] = true
 }
 
-func (c *Cluster) GetLeaderIDAndTerm() (int, int) {
+func (c *Cluster) GetSingleLeaderInfo() (int, int) {
 
-	for attempts := 0; attempts < 10; attempts++ {
+	for attempts := 0; attempts < 5; attempts++ {
 
 		leaderId := -1
 		leaderTerm := -1
@@ -110,17 +110,17 @@ func (c *Cluster) GetLeaderIDAndTerm() (int, int) {
 			if c.isConnected[i] {
 				_, term, isLeader := c.cluster[i].node.GetIDTermIsLeader()
 				if isLeader {
-					if leaderId != -1 {
-						DebuggerLog("GetLeaderIDAndTerm : %v is already leader", i)
+					if leaderId < 0 {
+						leaderId = i
+						leaderTerm = term
+					} else {
+						panic("Both Node " + string(rune(leaderId)) + " and Node " + string(rune(i)) + " think they're leaders")
 					}
-					leaderId = i
-					leaderTerm = term
 				}
 			}
 		}
 
-		if leaderId > 0 {
-			DebuggerLog("GetLeaderIDAndTerm : Leader is %v, term is %v", leaderId, leaderTerm)
+		if leaderId >= 0 {
 			return leaderId, leaderTerm
 		}
 
