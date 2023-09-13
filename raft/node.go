@@ -58,6 +58,7 @@ func (n *Node) startElectionTimer() {
 	electionTimeout := getElectionTimeout()
 
 	n.mu.Lock()
+	DebuggerLog("Node %v: startElectionTimer holding lock", n.id)
 	termStarted := n.currentTerm
 	n.mu.Unlock()
 
@@ -66,8 +67,12 @@ func (n *Node) startElectionTimer() {
 	statusCheckTicker := time.NewTicker(10 * time.Millisecond)
 	defer statusCheckTicker.Stop()
 	for {
+		DebuggerLog("Node %v: begin startElectionTimer for loop", n.id)
 		<-statusCheckTicker.C
 		n.mu.Lock()
+		DebuggerLog("Node %v: startElectionTimer holding lock inside for loop", n.id)
+
+		DebuggerLog("Node %v : Current data: state: %v, term: %v, voteForId: %v", n.id, n.state, n.currentTerm, n.voteForId)
 
 		if n.state != Candidate && n.state != Follower {
 			n.mu.Unlock()
@@ -82,12 +87,15 @@ func (n *Node) startElectionTimer() {
 		}
 
 		if timePassedSinceLastReset := time.Since(n.lastElectionTimerResetTime); timePassedSinceLastReset >= electionTimeout {
+			// still holding lock, thus inside startElection, no need to lock again, or it would stuck
 			n.startElection()
 			n.mu.Unlock()
+			DebuggerLog("Node %v: Election timer timed out, start a new election", n.id)
 			return
 		}
 
 		n.mu.Unlock()
+		DebuggerLog("Node %v: end startElectionTimer for loop", n.id)
 	}
 }
 
@@ -111,9 +119,6 @@ type RequestVoteReply struct {
 
 func (n *Node) startElection() {
 
-	// the following fields are accessed by startElectionTimer() which recursively call startElection()
-	// so we don't need to lock them here or else we will have deadlock
-
 	n.state = Candidate
 	n.currentTerm++
 
@@ -121,6 +126,8 @@ func (n *Node) startElection() {
 
 	n.lastElectionTimerResetTime = time.Now()
 	n.voteForId = n.id
+
+	DebuggerLog("start election change data: state: %v, term: %v, voteForId: %v", n.state, n.currentTerm, n.voteForId)
 
 	votesReceived := 1
 
@@ -140,6 +147,7 @@ func (n *Node) startElection() {
 			if err := n.server.Call(peerId, "Node.RequestVote", args, &reply); err == nil {
 
 				n.mu.Lock()
+				DebuggerLog("Node %v: startElection holding lock first if", n.id)
 				defer n.mu.Unlock()
 
 				DebuggerLog("Node %v: Received RequestVote reply from Node %v: %+v", n.id, peerId, reply)
@@ -199,6 +207,7 @@ func (n *Node) transitionToLeader() {
 			<-heartbeatTicker.C
 
 			n.mu.Lock()
+			DebuggerLog("Node %v: transitionToLeader holding lock", n.id)
 			if n.state != Leader {
 				n.mu.Unlock()
 				return
@@ -225,6 +234,7 @@ type AppendEntriesReply struct {
 
 func (n *Node) sendHeartbeats() {
 	n.mu.Lock()
+	DebuggerLog("Node %v: sendHeartbeats holding lock", n.id)
 	if n.state != Leader {
 		n.mu.Unlock()
 		return
@@ -242,6 +252,7 @@ func (n *Node) sendHeartbeats() {
 			reply := AppendEntriesReply{}
 			if err := n.server.Call(peerId, "Node.AppendEntries", args, &reply); err == nil {
 				n.mu.Lock()
+				DebuggerLog("Node %v: sendHeartbeats holding lock inside if", n.id)
 				defer n.mu.Unlock()
 				if reply.Term > savedCurrentTerm {
 					DebuggerLog("term out of date in heartbeat reply")
@@ -255,6 +266,7 @@ func (n *Node) sendHeartbeats() {
 
 func (n *Node) RequestVote(args RequestVoteArgs, reply *RequestVoteReply) error {
 	n.mu.Lock()
+	DebuggerLog("Node %v: RequestVote holding lock", n.id)
 	defer n.mu.Unlock()
 
 	if n.state == Dead {
@@ -284,6 +296,7 @@ func (n *Node) RequestVote(args RequestVoteArgs, reply *RequestVoteReply) error 
 
 func (n *Node) AppendEntries(args AppendEntriesArgs, reply *AppendEntriesReply) error {
 	n.mu.Lock()
+	DebuggerLog("Node %v: AppendEntries holding lock", n.id)
 	defer n.mu.Unlock()
 
 	if n.state == Dead {
@@ -318,6 +331,7 @@ func (n *Node) AppendEntries(args AppendEntriesArgs, reply *AppendEntriesReply) 
 func (n *Node) Kill() {
 	DebuggerLog("Inside Node %v: Killing", n.id)
 	n.mu.Lock()
+	DebuggerLog("Kill holding lock")
 	defer n.mu.Unlock()
 	DebuggerLog("After begin Node %v: Killing, state is %v", n.id, n.state)
 	n.state = Dead
@@ -326,6 +340,7 @@ func (n *Node) Kill() {
 
 func (n *Node) GetIDTermIsLeader() (int, int, bool) {
 	n.mu.Lock()
+	DebuggerLog("GetIDTermIsLeader holding lock")
 	defer n.mu.Unlock()
 	return n.id, n.currentTerm, n.state == Leader
 }

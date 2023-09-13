@@ -1,6 +1,8 @@
 package raft
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestLeaderElection(t *testing.T) {
 	cluster := MakeAndStartNewCluster(t, 5)
