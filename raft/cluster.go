@@ -108,6 +108,7 @@ func (c *Cluster) CheckSingleLeader() (int, int) {
 		for i := 0; i < c.n; i++ {
 			if c.connected[i] {
 				_, term, isLeader := c.cluster[i].node.Report()
+				DebuggerLog("CheckSingleLeader: server %d term %d isLeader %v", i, term, isLeader)
 				if isLeader {
 					if leaderId < 0 {
 						leaderId = i
@@ -133,6 +134,7 @@ func (c *Cluster) CheckNoLeader() {
 	for i := 0; i < c.n; i++ {
 		if c.connected[i] {
 			_, _, isLeader := c.cluster[i].node.Report()
+			DebuggerLog("CheckNoLeader: server %d isLeader %v", i, isLeader)
 			if isLeader {
 				c.t.Fatalf("server %d leader; want none", i)
 			}
