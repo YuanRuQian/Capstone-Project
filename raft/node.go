@@ -114,6 +114,41 @@ func (m AppendEntriesArgs) isHeartbeat() bool {
 func (node *Node) run() {
 	<-node.isReadyToRun
 
+	go func() {
+		DebuggerLog("Node %v: start single thread listener", node.id)
+		for {
+			DebuggerLog("Node %v: is in for loop", node.id)
+
+			select {
+
+			case update := <-node.nodeInfoWriteCh:
+				DebuggerLog("Node %v: run nodeInfoWriteCh update: %+v", node.id, update)
+				node.handleInfoUpdate(update)
+				node.nodeInfoWriteFinishedCh <- nil
+				DebuggerLog("Node %v: nodeInfoWriteCh nodeInfoWriteFinishedCh: %+v", node.id, update)
+
+			case <-node.nodeInfoReadCh:
+				DebuggerLog("Node %v: run nodeInfoReadCh", node.id)
+				nodeInfo := node.getVolatileStateInfo()
+				DebuggerLog("Node %v: nodeInfoReadCh nodeInfo: %+v", node.id, nodeInfo)
+				node.nodeInfoReadReplyCh <- nodeInfo
+				DebuggerLog("Node %v: nodeInfoReadCh nodeInfoReadReplyCh: %+v", node.id, node.nodeInfoReadReplyCh)
+
+			case <-node.stopRunning:
+				DebuggerLog("Node %v: run stopRunning", node.id)
+				node.handleStopRunning()
+
+			case msg := <-node.appendEntries:
+				DebuggerLog("Node %v: run appendEntries: %+v", node.id, msg)
+				node.handleAppendEntries(msg)
+
+			case msg := <-node.requestVote:
+				DebuggerLog("Node %v: run requestVote: %+v", node.id, msg)
+				node.handleRequestVote(msg)
+			}
+		}
+	}()
+
 	node.writeCurrentVolatileStateInfo(VolatileStateInfo{
 		State:             node.state,
 		CurrentTerm:       node.currentTerm,
@@ -122,36 +157,6 @@ func (node *Node) run() {
 	})
 
 	node.runElectionTimer()
-
-	for {
-		select {
-
-		case update := <-node.nodeInfoWriteCh:
-			DebuggerLog("Node %v: run nodeInfoWriteCh update: %+v", node.id, update)
-			node.handleInfoUpdate(update)
-			node.nodeInfoWriteFinishedCh <- nil
-			DebuggerLog("Node %v: nodeInfoWriteCh nodeInfoWriteFinishedCh: %+v", node.id, update)
-
-		case <-node.nodeInfoReadCh:
-			DebuggerLog("Node %v: run nodeInfoReadCh", node.id)
-			nodeInfo := node.getVolatileStateInfo()
-			DebuggerLog("Node %v: nodeInfoReadCh nodeInfo: %+v", node.id, nodeInfo)
-			node.nodeInfoReadReplyCh <- nodeInfo
-			DebuggerLog("Node %v: nodeInfoReadCh nodeInfoReadReplyCh: %+v", node.id, node.nodeInfoReadReplyCh)
-
-		case <-node.stopRunning:
-			DebuggerLog("Node %v: run stopRunning", node.id)
-			node.handleStopRunning()
-
-		case msg := <-node.appendEntries:
-			DebuggerLog("Node %v: run appendEntries: %+v", node.id, msg)
-			node.handleAppendEntries(msg)
-
-		case msg := <-node.requestVote:
-			DebuggerLog("Node %v: run requestVote: %+v", node.id, msg)
-			node.handleRequestVote(msg)
-		}
-	}
 }
 
 func (node *Node) handleAppendEntries(args AppendEntriesArgs) {
