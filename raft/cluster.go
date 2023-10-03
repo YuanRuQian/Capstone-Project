@@ -2,6 +2,7 @@ package raft
 
 import (
 	"log"
+	"sync"
 	"testing"
 	"time"
 )
@@ -14,6 +15,8 @@ type Cluster struct {
 	// is currently connected to peers (if false, it's partitioned and no messages
 	// will pass to or from it).
 	connected []bool
+
+	allNodesAreReadyForIncomingSignal sync.WaitGroup
 
 	n int
 	t *testing.T
@@ -35,7 +38,7 @@ func MakeNewCluster(t *testing.T, n int) *Cluster {
 			}
 		}
 
-		ns[i] = MakeNewServer(i, peerIds, ready)
+		ns[i] = MakeNewServer(i, peerIds, ready, &sync.WaitGroup{})
 		ns[i].Serve()
 	}
 
@@ -51,10 +54,11 @@ func MakeNewCluster(t *testing.T, n int) *Cluster {
 	close(ready)
 
 	return &Cluster{
-		cluster:   ns,
-		connected: connected,
-		n:         n,
-		t:         t,
+		cluster:                           ns,
+		connected:                         connected,
+		allNodesAreReadyForIncomingSignal: sync.WaitGroup{},
+		n:                                 n,
+		t:                                 t,
 	}
 }
 

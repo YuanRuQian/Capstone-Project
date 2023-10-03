@@ -1,6 +1,9 @@
 package raft
 
-import "time"
+import (
+	"sync"
+	"time"
+)
 
 type State int
 
@@ -20,27 +23,28 @@ type VolatileStateInfo struct {
 
 // Node represents a single Raft node.
 type Node struct {
-	server                     *Server
-	id                         int
-	currentTerm                int
-	votedFor                   int
-	log                        []LogEntry
-	commitIndex                int
-	lastApplied                int
-	state                      State
-	leaderID                   int
-	peers                      []int
-	appendEntries              chan AppendEntriesArgs
-	appendEntriesReply         chan AppendEntriesReply
-	requestVote                chan RequestVoteArgs
-	requestVoteReply           chan RequestVoteReply
-	isReadyToRun               <-chan interface{}
-	stopRunning                chan interface{}
-	lastElectionTimerResetTime time.Time
-	nodeInfoWriteCh            chan VolatileStateInfo
-	nodeInfoWriteFinishedCh    chan interface{}
-	nodeInfoReadCh             chan interface{}
-	nodeInfoReadReplyCh        chan VolatileStateInfo
+	server                            *Server
+	id                                int
+	currentTerm                       int
+	votedFor                          int
+	log                               []LogEntry
+	commitIndex                       int
+	lastApplied                       int
+	state                             State
+	leaderID                          int
+	peers                             []int
+	appendEntries                     chan AppendEntriesArgs
+	appendEntriesReply                chan AppendEntriesReply
+	requestVote                       chan RequestVoteArgs
+	requestVoteReply                  chan RequestVoteReply
+	isReadyToRun                      <-chan interface{}
+	stopRunning                       chan interface{}
+	lastElectionTimerResetTime        time.Time
+	nodeInfoWriteCh                   chan VolatileStateInfo
+	nodeInfoWriteFinishedCh           chan interface{}
+	nodeInfoReadCh                    chan interface{}
+	nodeInfoReadReplyCh               chan VolatileStateInfo
+	allNodesAreReadyForIncomingSignal *sync.WaitGroup
 }
 
 // LogEntry represents a log entry in Raft.
@@ -77,30 +81,33 @@ type RequestVoteReply struct {
 	VoteGranted bool
 }
 
-func MakeNewNode(id int, peers []int, server *Server, isReadyToRun <-chan interface{}) *Node {
+func MakeNewNode(id int, peers []int, server *Server, isReadyToRun <-chan interface{}, allNodesAreReadyForIncomingSignal *sync.WaitGroup) *Node {
 	node := &Node{
-		server:                     server,
-		id:                         id,
-		currentTerm:                0,
-		votedFor:                   -1,
-		log:                        make([]LogEntry, 0),
-		commitIndex:                0,
-		lastApplied:                0,
-		state:                      Follower,
-		leaderID:                   -1,
-		peers:                      peers,
-		appendEntries:              make(chan AppendEntriesArgs),
-		appendEntriesReply:         make(chan AppendEntriesReply),
-		requestVote:                make(chan RequestVoteArgs),
-		requestVoteReply:           make(chan RequestVoteReply),
-		isReadyToRun:               isReadyToRun,
-		stopRunning:                make(chan interface{}),
-		lastElectionTimerResetTime: time.Date(1, 1, 1, 0, 0, 0, 0, time.UTC),
-		nodeInfoWriteCh:            make(chan VolatileStateInfo),
-		nodeInfoWriteFinishedCh:    make(chan interface{}),
-		nodeInfoReadCh:             make(chan interface{}),
-		nodeInfoReadReplyCh:        make(chan VolatileStateInfo),
+		server:                            server,
+		id:                                id,
+		currentTerm:                       0,
+		votedFor:                          -1,
+		log:                               make([]LogEntry, 0),
+		commitIndex:                       0,
+		lastApplied:                       0,
+		state:                             Follower,
+		leaderID:                          -1,
+		peers:                             peers,
+		appendEntries:                     make(chan AppendEntriesArgs),
+		appendEntriesReply:                make(chan AppendEntriesReply),
+		requestVote:                       make(chan RequestVoteArgs),
+		requestVoteReply:                  make(chan RequestVoteReply),
+		isReadyToRun:                      isReadyToRun,
+		stopRunning:                       make(chan interface{}),
+		lastElectionTimerResetTime:        time.Date(1, 1, 1, 0, 0, 0, 0, time.UTC),
+		nodeInfoWriteCh:                   make(chan VolatileStateInfo),
+		nodeInfoWriteFinishedCh:           make(chan interface{}),
+		nodeInfoReadCh:                    make(chan interface{}),
+		nodeInfoReadReplyCh:               make(chan VolatileStateInfo),
+		allNodesAreReadyForIncomingSignal: allNodesAreReadyForIncomingSignal,
 	}
+
+	allNodesAreReadyForIncomingSignal.Add(1)
 
 	go node.run()
 
@@ -116,23 +123,23 @@ func (node *Node) run() {
 
 	go func() {
 		DebuggerLog("Node %v: start single thread listener", node.id)
-		for {
-			DebuggerLog("Node %v: is in for loop", node.id)
 
+		node.allNodesAreReadyForIncomingSignal.Done()
+
+		for {
 			select {
 
 			case update := <-node.nodeInfoWriteCh:
-				DebuggerLog("Node %v: run nodeInfoWriteCh update: %+v", node.id, update)
+				// DebuggerLog("Node %v: run nodeInfoWriteCh update: %+v", node.id, update)
 				node.handleInfoUpdate(update)
 				node.nodeInfoWriteFinishedCh <- nil
-				DebuggerLog("Node %v: nodeInfoWriteCh nodeInfoWriteFinishedCh: %+v", node.id, update)
+				// DebuggerLog("Node %v: nodeInfoWriteCh nodeInfoWriteFinishedCh: %+v", node.id, update)
 
 			case <-node.nodeInfoReadCh:
-				DebuggerLog("Node %v: run nodeInfoReadCh", node.id)
+				// DebuggerLog("Node %v: run nodeInfoReadCh", node.id)
 				nodeInfo := node.getVolatileStateInfo()
-				DebuggerLog("Node %v: nodeInfoReadCh nodeInfo: %+v", node.id, nodeInfo)
 				node.nodeInfoReadReplyCh <- nodeInfo
-				DebuggerLog("Node %v: nodeInfoReadCh nodeInfoReadReplyCh: %+v", node.id, node.nodeInfoReadReplyCh)
+				// DebuggerLog("Node %v: nodeInfoReadCh nodeInfo: %+v", node.id, nodeInfo)
 
 			case <-node.stopRunning:
 				DebuggerLog("Node %v: run stopRunning", node.id)
@@ -229,7 +236,7 @@ func (node *Node) handleRequestVote(args RequestVoteArgs) {
 
 func (node *Node) runElectionTimer() {
 	electionTimeout := getElectionTimeout(150, 300)
-	DebuggerLog("Node %v: Election timer started with timeout %v, try to read volatile state info", node.id, electionTimeout)
+	DebuggerLog("Node %v: Election timer started with timeout %v", node.id, electionTimeout)
 	nodeInfo := node.readCurrentVolatileStateInfo()
 	termStarted := nodeInfo.CurrentTerm
 	ticker := time.NewTicker(10 * time.Millisecond)
@@ -266,7 +273,6 @@ func (node *Node) startElection() {
 		VotedFor:          node.id,
 	})
 
-	DebuggerLog("Node %v: Start election for term %v, try to read current volatile info", node.id, node.currentTerm+1)
 	nodeInfo := node.readCurrentVolatileStateInfo()
 
 	savedCurrentTerm := nodeInfo.CurrentTerm
@@ -283,7 +289,9 @@ func (node *Node) startElection() {
 			}
 			var reply RequestVoteReply
 			DebuggerLog("Node %v: Send RequestVote to %v", node.id, peerId)
-			if err := node.server.Call(peerId, "Node.HandleRequestVoteRPC", args, &reply); err == nil {
+
+			// service method: rpc proxy delegate method, not the node's method
+			if err := node.server.Call(peerId, "Node.RequestVote", args, &reply); err == nil {
 
 				DebuggerLog("Node %v: Receive RequestVoteReply from %v : %+v", node.id, peerId, reply)
 
@@ -317,6 +325,7 @@ func (node *Node) HandleStopRPC() {
 }
 
 func (node *Node) HandleRequestVoteRPC(args RequestVoteArgs, reply *RequestVoteReply) error {
+	DebuggerLog("Node %v: HandleRequestVoteRPC Receive RequestVote from %v: %+v ", node.id, args.CandidateID, args)
 	node.requestVote <- args
 	ret := <-node.requestVoteReply
 	reply.Term = ret.Term
@@ -325,6 +334,7 @@ func (node *Node) HandleRequestVoteRPC(args RequestVoteArgs, reply *RequestVoteR
 }
 
 func (node *Node) HandleAppendEntriesRPC(args AppendEntriesArgs, reply *AppendEntriesReply) error {
+	DebuggerLog("Node %v: HandleAppendEntriesRPC Receive AppendEntries from %v: %+v", node.id, args.LeaderID, args)
 	node.appendEntries <- args
 	ret := <-node.appendEntriesReply
 	reply.Term = ret.Term
@@ -390,7 +400,9 @@ func (node *Node) sendHeartbeats() {
 		go func(peerId int) {
 			DebuggerLog("Node %v: Send AppendEntries to %v", node.id, peerId)
 			var reply AppendEntriesReply
-			if err := node.server.Call(peerId, "Node.HandleAppendEntriesRPC", args, &reply); err == nil {
+
+			// service method: rpc proxy delegate method, not the node's method
+			if err := node.server.Call(peerId, "Node.AppendEntries", args, &reply); err == nil {
 				if reply.Term > savedCurrentTerm {
 					DebuggerLog("Node %v: term out of date in heartbeat reply", node.id)
 					node.transitionToFollower(reply.Term)
@@ -402,8 +414,11 @@ func (node *Node) sendHeartbeats() {
 }
 
 func (node *Node) Report() (id int, term int, isLeader bool) {
-	DebuggerLog("Node %v: report, try to read current volatile info", node.id)
+	// Wait for all nodes in the cluster to be ready for incoming signals
+	node.allNodesAreReadyForIncomingSignal.Wait()
+
 	nodeInfo := node.readCurrentVolatileStateInfo()
+	DebuggerLog("Node %v: report info: %+v", node.id, nodeInfo)
 	return node.id, nodeInfo.CurrentTerm, nodeInfo.State == Leader
 }
 
@@ -424,15 +439,11 @@ func (node *Node) getVolatileStateInfo() VolatileStateInfo {
 }
 
 func (node *Node) readCurrentVolatileStateInfo() VolatileStateInfo {
-	DebuggerLog("Node %v: read current volatile state info before sending out signals", node.id)
 	node.nodeInfoReadCh <- nil
-	DebuggerLog("Node %v: read current volatile state info after node.nodeInfoReadCh <- nil", node.id)
 	return <-node.nodeInfoReadReplyCh
 }
 
 func (node *Node) writeCurrentVolatileStateInfo(update VolatileStateInfo) {
-	DebuggerLog("Node %v: write current volatile state info: %+v", node.id, update)
 	node.nodeInfoWriteCh <- update
 	<-node.nodeInfoWriteFinishedCh
-	DebuggerLog("Node %v: write current volatile state info finished", node.id)
 }

@@ -3,9 +3,11 @@ package raft
 import (
 	"fmt"
 	"log"
+	"math/rand"
 	"net"
 	"net/rpc"
 	"sync"
+	"time"
 )
 
 type Server struct {
@@ -22,30 +24,33 @@ type Server struct {
 
 	peerClients map[int]*rpc.Client
 
-	isReadyToStart <-chan interface{}
-	quit           chan interface{}
-	wg             sync.WaitGroup
+	isReadyToStart         <-chan interface{}
+	quit                   chan interface{}
+	serverClusterWaitGroup sync.WaitGroup
+
+	allNodesAreReadyForIncomingSignal *sync.WaitGroup
 }
 
-func MakeNewServer(serverId int, peerIds []int, ready <-chan interface{}) *Server {
+func MakeNewServer(serverId int, peerIds []int, ready <-chan interface{}, allNodesAreReadyForIncomingSignal *sync.WaitGroup) *Server {
 	return &Server{
-		serverId:       serverId,
-		peerIds:        peerIds,
-		peerClients:    make(map[int]*rpc.Client),
-		isReadyToStart: ready,
-		quit:           make(chan interface{}),
+		serverId:                          serverId,
+		peerIds:                           peerIds,
+		peerClients:                       make(map[int]*rpc.Client),
+		isReadyToStart:                    ready,
+		quit:                              make(chan interface{}),
+		allNodesAreReadyForIncomingSignal: allNodesAreReadyForIncomingSignal,
 	}
 }
 
 func (s *Server) Serve() {
 	s.mu.Lock()
-	s.node = MakeNewNode(s.serverId, s.peerIds, s, s.isReadyToStart)
+	s.node = MakeNewNode(s.serverId, s.peerIds, s, s.isReadyToStart, s.allNodesAreReadyForIncomingSignal)
 
 	// Create a new RPC server and register a RPCProxy that forwards all methods
 	// to n.node
 	s.rpcServer = rpc.NewServer()
 	s.rpcProxy = &RPCProxy{node: s.node}
-	s.rpcServer.RegisterName("ConsensusModule", s.rpcProxy)
+	s.rpcServer.RegisterName("Node", s.rpcProxy)
 
 	var err error
 	// randomly pick a port
@@ -56,9 +61,9 @@ func (s *Server) Serve() {
 	log.Printf("Server %v listening at %s", s.serverId, s.listener.Addr())
 	s.mu.Unlock()
 
-	s.wg.Add(1)
+	s.serverClusterWaitGroup.Add(1)
 	go func() {
-		defer s.wg.Done()
+		defer s.serverClusterWaitGroup.Done()
 
 		for {
 			conn, err := s.listener.Accept()
@@ -70,10 +75,10 @@ func (s *Server) Serve() {
 					log.Fatal("accept error:", err)
 				}
 			}
-			s.wg.Add(1)
+			s.serverClusterWaitGroup.Add(1)
 			go func() {
 				s.rpcServer.ServeConn(conn)
-				s.wg.Done()
+				s.serverClusterWaitGroup.Done()
 			}()
 		}
 	}()
@@ -96,7 +101,7 @@ func (s *Server) Shutdown() {
 	s.node.HandleStopRPC()
 	close(s.quit)
 	s.listener.Close()
-	s.wg.Wait()
+	s.serverClusterWaitGroup.Wait()
 }
 
 func (s *Server) GetListenAddr() net.Addr {
@@ -155,11 +160,13 @@ type RPCProxy struct {
 }
 
 func (rpp *RPCProxy) RequestVote(args RequestVoteArgs, reply *RequestVoteReply) error {
-	// TODO: add a random delay to RPCs
+	DebuggerLog(fmt.Sprintf("RPCProxy.RequestVote: %+v", args))
+	time.Sleep(time.Duration(1+rand.Intn(5)) * time.Millisecond)
 	return rpp.node.HandleRequestVoteRPC(args, reply)
 }
 
 func (rpp *RPCProxy) AppendEntries(args AppendEntriesArgs, reply *AppendEntriesReply) error {
-	// TODO: add a random delay to RPCs
+	DebuggerLog(fmt.Sprintf("RPCProxy.AppendEntries: %+v", args))
+	time.Sleep(time.Duration(1+rand.Intn(5)) * time.Millisecond)
 	return rpp.node.HandleAppendEntriesRPC(args, reply)
 }
