@@ -160,7 +160,7 @@ type RPCProxy struct {
 }
 
 func (rpp *RPCProxy) RequestVote(args RequestVoteArgs, reply *RequestVoteReply) error {
-	DebuggerLog(fmt.Sprintf("RPCProxy.RequestVote: %+v", args))
+	DebuggerLog(fmt.Sprintf("RPCProxy.RequestVote from server %v: %+v", rpp.node.id, args))
 	time.Sleep(time.Duration(1+rand.Intn(5)) * time.Millisecond)
 	return rpp.node.HandleRequestVoteRPC(args, reply)
 }

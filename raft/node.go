@@ -130,27 +130,18 @@ func (node *Node) run() {
 			select {
 
 			case update := <-node.nodeInfoWriteCh:
-				// DebuggerLog("Node %v: run nodeInfoWriteCh update: %+v", node.id, update)
-				node.handleInfoUpdate(update)
-				node.nodeInfoWriteFinishedCh <- nil
-				// DebuggerLog("Node %v: nodeInfoWriteCh nodeInfoWriteFinishedCh: %+v", node.id, update)
+				node.handleInfoWrite(update)
 
 			case <-node.nodeInfoReadCh:
-				// DebuggerLog("Node %v: run nodeInfoReadCh", node.id)
-				nodeInfo := node.getVolatileStateInfo()
-				node.nodeInfoReadReplyCh <- nodeInfo
-				// DebuggerLog("Node %v: nodeInfoReadCh nodeInfo: %+v", node.id, nodeInfo)
+				node.handleInfoRead()
 
 			case <-node.stopRunning:
-				DebuggerLog("Node %v: run stopRunning", node.id)
 				node.handleStopRunning()
 
 			case msg := <-node.appendEntries:
-				DebuggerLog("Node %v: run appendEntries: %+v", node.id, msg)
 				node.handleAppendEntries(msg)
 
 			case msg := <-node.requestVote:
-				DebuggerLog("Node %v: run requestVote: %+v", node.id, msg)
 				node.handleRequestVote(msg)
 			}
 		}
@@ -167,6 +158,8 @@ func (node *Node) run() {
 }
 
 func (node *Node) handleAppendEntries(args AppendEntriesArgs) {
+	DebuggerLog("Node %v: run appendEntries: %+v", node.id, args)
+
 	nodeInfo := node.readCurrentVolatileStateInfo()
 
 	if nodeInfo.State == Dead {
@@ -201,6 +194,8 @@ func (node *Node) handleAppendEntries(args AppendEntriesArgs) {
 }
 
 func (node *Node) handleRequestVote(args RequestVoteArgs) {
+	DebuggerLog("Node %v: run requestVote: %+v", node.id, args)
+
 	nodeInfo := node.readCurrentVolatileStateInfo()
 
 	if nodeInfo.State == Dead {
@@ -343,6 +338,7 @@ func (node *Node) HandleAppendEntriesRPC(args AppendEntriesArgs, reply *AppendEn
 }
 
 func (node *Node) handleStopRunning() {
+	DebuggerLog("Node %v: run stopRunning", node.id)
 	node.writeCurrentVolatileStateInfo(
 		VolatileStateInfo{
 			State:             Dead,
@@ -422,11 +418,13 @@ func (node *Node) Report() (id int, term int, isLeader bool) {
 	return node.id, nodeInfo.CurrentTerm, nodeInfo.State == Leader
 }
 
-func (node *Node) handleInfoUpdate(update VolatileStateInfo) {
+func (node *Node) handleInfoWrite(update VolatileStateInfo) {
+	DebuggerLog("Node %v: run nodeInfoWriteCh update: %+v", node.id, update)
 	node.state = update.State
 	node.currentTerm = update.CurrentTerm
 	node.lastElectionTimerResetTime = update.LastElectionReset
 	node.votedFor = update.VotedFor
+	node.nodeInfoWriteFinishedCh <- nil
 }
 
 func (node *Node) getVolatileStateInfo() VolatileStateInfo {
@@ -446,4 +444,10 @@ func (node *Node) readCurrentVolatileStateInfo() VolatileStateInfo {
 func (node *Node) writeCurrentVolatileStateInfo(update VolatileStateInfo) {
 	node.nodeInfoWriteCh <- update
 	<-node.nodeInfoWriteFinishedCh
+}
+
+func (node *Node) handleInfoRead() {
+	nodeInfo := node.getVolatileStateInfo()
+	DebuggerLog("Node %v: run nodeInfoReadCh nodeInfo: %+v", node.id, nodeInfo)
+	node.nodeInfoReadReplyCh <- nodeInfo
 }
