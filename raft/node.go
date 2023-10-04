@@ -128,7 +128,6 @@ func (node *Node) run() {
 
 		for {
 			select {
-
 			case update := <-node.nodeInfoWriteCh:
 				node.handleInfoWrite(update)
 
