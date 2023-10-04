@@ -23,3 +23,12 @@ func getRandomInt(min, max int) int {
 func getElectionTimeout(min, max int) time.Duration {
 	return time.Duration(getRandomInt(min, max)) * time.Millisecond
 }
+
+func getVolatileStateInfoCopyFrom(info VolatileStateInfo) VolatileStateInfo {
+	return VolatileStateInfo{
+		State:             info.State,
+		CurrentTerm:       info.CurrentTerm,
+		LastElectionReset: info.LastElectionReset,
+		VotedFor:          info.VotedFor,
+	}
+}
