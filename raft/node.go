@@ -323,6 +323,7 @@ func (node *Node) HandleRequestVoteRPC(args RequestVoteArgs, reply *RequestVoteR
 	DebuggerLog("Node %v: HandleRequestVoteRPC Receive RequestVote from %v: %+v ", node.id, args.CandidateID, args)
 	node.requestVote <- args
 	ret := <-node.requestVoteReply
+	DebuggerLog("Node %v: HandleRequestVoteRPC right after ret := <-node.requestVoteReply | current reply: %+v", node.id, reply)
 	reply.Term = ret.Term
 	reply.VoteGranted = ret.VoteGranted
 	return nil
@@ -332,6 +333,7 @@ func (node *Node) HandleAppendEntriesRPC(args AppendEntriesArgs, reply *AppendEn
 	DebuggerLog("Node %v: HandleAppendEntriesRPC Receive AppendEntries from %v: %+v", node.id, args.LeaderID, args)
 	node.appendEntries <- args
 	ret := <-node.appendEntriesReply
+	DebuggerLog("Node %v: HandleAppendEntriesRPC right after ret := <-node.appendEntriesReply | current reply: %+v", node.id, reply)
 	reply.Term = ret.Term
 	reply.Success = ret.Success
 	return nil
