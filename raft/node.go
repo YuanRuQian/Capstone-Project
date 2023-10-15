@@ -119,6 +119,7 @@ func (node *Node) run() {
 		node.allNodesAreReadyForIncomingSignal.Done()
 
 		for {
+			DebuggerLog("Node %v: before for loop select", node.id)
 			select {
 			case writeInfoOp := <-node.writeInfoOpCh:
 				node.handleInfoWrite(writeInfoOp)
@@ -135,6 +136,7 @@ func (node *Node) run() {
 			case requestVoteOp := <-node.requestVoteOpCh:
 				node.handleRequestVote(requestVoteOp)
 			}
+			DebuggerLog("Node %v: after for loop select", node.id)
 		}
 	}()
 
@@ -352,9 +354,12 @@ func (node *Node) handleStopRunning(op *StopOp) {
 	DebuggerLog("Node %v: run stopOpCh", node.id)
 	newVolStateInfo := node.getVolatileStateInfo()
 	newVolStateInfo.State = Dead
-	node.writeCurrentVolatileStateInfo(newVolStateInfo)
-	op.reply <- true
+	// use overwriteCurrentVolatileStateInfo instead of writeCurrentVolatileStateInfo to avoid deadlock
+	// because the stop signal is still blocking the select loop stop channel case
+	node.overwriteCurrentVolatileStateInfo(newVolStateInfo)
+	DebuggerLog("Node %v: run stopOpCh before reply", node.id)
 	DebuggerLog("Node %v: run stopOpCh done", node.id)
+	op.reply <- true
 }
 
 func (node *Node) transitionToFollower(term int) {
@@ -429,12 +434,16 @@ func (node *Node) Report() (id int, term int, isLeader bool) {
 	return node.id, nodeInfo.CurrentTerm, nodeInfo.State == Leader
 }
 
+func (node *Node) overwriteCurrentVolatileStateInfo(update VolatileStateInfo) {
+	node.volatileStateInfo.State = update.State
+	node.volatileStateInfo.CurrentTerm = update.CurrentTerm
+	node.volatileStateInfo.LastElectionReset = update.LastElectionReset
+	node.volatileStateInfo.VotedFor = update.VotedFor
+}
+
 func (node *Node) handleInfoWrite(op *WriteInfoOp) {
 	DebuggerLog("Node %v: run nodeInfoWriteCh update: %+v", node.id, op.info)
-	node.volatileStateInfo.State = op.info.State
-	node.volatileStateInfo.CurrentTerm = op.info.CurrentTerm
-	node.volatileStateInfo.LastElectionReset = op.info.LastElectionReset
-	node.volatileStateInfo.VotedFor = op.info.VotedFor
+	node.overwriteCurrentVolatileStateInfo(op.info)
 	op.reply <- true
 	DebuggerLog("Node %v: run nodeInfoWriteCh done", node.id)
 }
@@ -464,6 +473,7 @@ func (node *Node) writeCurrentVolatileStateInfo(update VolatileStateInfo) {
 		info:  update,
 		reply: make(chan bool),
 	}
+	DebuggerLog("Node %v: writeCurrentVolatileStateInfo right before nodeInfoWriteCh", node.id)
 	node.writeInfoOpCh <- writeInfoOp
 	<-writeInfoOp.reply
 }
