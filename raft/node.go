@@ -35,8 +35,6 @@ type Node struct {
 	requestVoteOpCh                   chan *RequestVoteOp
 	isReadyToRun                      <-chan interface{}
 	stopOpCh                          chan *StopOp
-	writeInfoOpCh                     chan *WriteInfoOp
-	readInfoOpCh                      chan *ReadInfoOp
 	allNodesAreReadyForIncomingSignal *sync.WaitGroup
 }
 
@@ -94,8 +92,6 @@ func MakeNewNode(id int, peers []int, server *Server, isReadyToRun <-chan interf
 		requestVoteOpCh:                   make(chan *RequestVoteOp),
 		isReadyToRun:                      isReadyToRun,
 		stopOpCh:                          make(chan *StopOp),
-		writeInfoOpCh:                     make(chan *WriteInfoOp),
-		readInfoOpCh:                      make(chan *ReadInfoOp),
 		allNodesAreReadyForIncomingSignal: allNodesAreReadyForIncomingSignal,
 	}
 
@@ -118,17 +114,20 @@ func (node *Node) run() {
 
 		node.allNodesAreReadyForIncomingSignal.Done()
 
+		ticker := time.NewTicker(10 * time.Millisecond)
+		defer ticker.Stop()
+
 		for {
 			DebuggerLog("Node %v: before for loop select", node.id)
 			select {
-			case writeInfoOp := <-node.writeInfoOpCh:
-				node.handleInfoWrite(writeInfoOp)
 
-			case readInfoOp := <-node.readInfoOpCh:
-				node.handleInfoRead(readInfoOp)
+			case t := <-ticker.C:
+				DebuggerLog("Node %v: ticker.C: %v", node.id, t)
+				node.handleElectionTicker()
 
 			case stopOp := <-node.stopOpCh:
 				node.handleStopRunning(stopOp)
+				ticker.Stop()
 
 			case appendEntriesOp := <-node.appendEntriesOpCh:
 				node.handleAppendEntries(appendEntriesOp)
@@ -140,27 +139,21 @@ func (node *Node) run() {
 		}
 	}()
 
-	newVolStateInfo := node.getVolatileStateInfo()
-	newVolStateInfo.LastElectionReset = time.Now()
-	node.writeCurrentVolatileStateInfo(newVolStateInfo)
-
-	node.runElectionTimer()
+	node.volatileStateInfo.LastElectionReset = time.Now()
 }
 
 func (node *Node) handleAppendEntries(op *AppendEntriesOp) {
 	DebuggerLog("Node %v: run appendEntries: %+v", node.id, op.args)
 
-	DebuggerLog("Node %v: run appendEntries before readCurrentVolatileStateInfo: %+v", node.id, op.args)
+	DebuggerLog("Node %v: run appendEntries before getVolatileStateInfo: %+v", node.id, op.args)
 
-	nodeInfo := node.readCurrentVolatileStateInfo()
-
-	if nodeInfo.State == Dead {
+	if node.volatileStateInfo.State == Dead {
 		DebuggerLog("Node %v: state is dead, return", node.id)
 		return
 	}
 	DebuggerLog("Node %v: Receive AppendEntries from %v : %+v", node.id, op.args.LeaderID, op.args)
 
-	if op.args.Term > nodeInfo.CurrentTerm {
+	if op.args.Term > node.volatileStateInfo.CurrentTerm {
 		DebuggerLog("Node %v: term out of date in AppendEntries", node.id)
 		node.transitionToFollower(op.args.Term)
 	}
@@ -168,53 +161,46 @@ func (node *Node) handleAppendEntries(op *AppendEntriesOp) {
 	var reply AppendEntriesReply
 
 	reply.Success = false
-	if op.args.Term == nodeInfo.CurrentTerm {
-		if nodeInfo.State != Follower {
+	if op.args.Term == node.volatileStateInfo.CurrentTerm {
+		if node.volatileStateInfo.State != Follower {
 			node.transitionToFollower(op.args.Term)
 		}
-		newVolStateInfo := getVolatileStateInfoCopyFrom(nodeInfo)
-		newVolStateInfo.LastElectionReset = time.Now()
-		node.writeCurrentVolatileStateInfo(newVolStateInfo)
+
+		node.volatileStateInfo.LastElectionReset = time.Now()
 		reply.Success = true
 	}
 
-	reply.Term = nodeInfo.CurrentTerm
+	reply.Term = node.volatileStateInfo.CurrentTerm
 	DebuggerLog("Node %v: Send AppendEntries reply to %v: %+v", node.id, op.args.LeaderID, reply)
 	op.reply <- reply
 	DebuggerLog("Node %v: run appendEntries done", node.id)
 }
 
 func (node *Node) handleRequestVote(op *RequestVoteOp) {
-	DebuggerLog("Node %v: run requestVote before readCurrentVolatileStateInfo: %+v", node.id, op.args)
+	DebuggerLog("Node %v: run requestVote before getVolatileStateInfo: %+v", node.id, op.args)
 
-	nodeInfo := node.readCurrentVolatileStateInfo()
+	DebuggerLog("Node %v: run requestVote after getVolatileStateInfo: %+v", node.id, op.args)
 
-	DebuggerLog("Node %v: run requestVote after readCurrentVolatileStateInfo: %+v", node.id, op.args)
-
-	if nodeInfo.State == Dead {
+	if node.volatileStateInfo.State == Dead {
 		DebuggerLog("Node %v: state is dead, return", node.id)
 		return
 	}
 	DebuggerLog("Node %v: Receive RequestVote from %v", node.id, op.args.CandidateID)
 
-	if op.args.Term > nodeInfo.CurrentTerm {
+	if op.args.Term > node.volatileStateInfo.CurrentTerm {
 		DebuggerLog("Node %v: term out of date in RequestVote", node.id)
 		node.transitionToFollower(op.args.Term)
 	}
 
 	var reply RequestVoteReply
 
-	if nodeInfo.CurrentTerm == op.args.Term &&
-		(nodeInfo.VotedFor == -1 || nodeInfo.VotedFor == op.args.CandidateID) {
+	if node.volatileStateInfo.CurrentTerm == op.args.Term &&
+		(node.volatileStateInfo.VotedFor == -1 || node.volatileStateInfo.VotedFor == op.args.CandidateID) {
 		reply.VoteGranted = true
 
-		node.writeCurrentVolatileStateInfo(
-			VolatileStateInfo{
-				State:             nodeInfo.State,
-				CurrentTerm:       nodeInfo.CurrentTerm,
-				LastElectionReset: time.Now(),
-				VotedFor:          op.args.CandidateID,
-			})
+		node.volatileStateInfo.VotedFor = op.args.CandidateID
+		node.volatileStateInfo.LastElectionReset = time.Now()
+
 	} else {
 		reply.VoteGranted = false
 	}
@@ -223,53 +209,18 @@ func (node *Node) handleRequestVote(op *RequestVoteOp) {
 	op.reply <- reply
 }
 
-func (node *Node) runElectionTimer() {
-	electionTimeout := getElectionTimeout(150, 300)
-	DebuggerLog("Node %v: Election timer started with timeout %v", node.id, electionTimeout)
-	DebuggerLog("Node %v: runElectionTimer before readCurrentVolatileStateInfo", node.id)
-	nodeInfo := node.readCurrentVolatileStateInfo()
-	termStarted := nodeInfo.CurrentTerm
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		<-ticker.C
-
-		if nodeInfo.State != Candidate && nodeInfo.State != Follower {
-			DebuggerLog("Node %v: Election timer stopped because node is not candidate or follower", node.id)
-			return
-		}
-
-		if nodeInfo.CurrentTerm != termStarted {
-			DebuggerLog("Node %v: Election timer stopped because term changed", node.id)
-			return
-		}
-
-		if elapse := time.Since(nodeInfo.LastElectionReset); elapse >= electionTimeout {
-			DebuggerLog("Node %v: Election timer timed out without winner, start a new election", node.id)
-			node.startElection()
-			return
-		}
-
-	}
-}
-
 func (node *Node) startElection() {
 
 	DebuggerLog("Node %v: just in startElection", node.id)
 
-	node.writeCurrentVolatileStateInfo(VolatileStateInfo{
-		State:             Candidate,
-		CurrentTerm:       node.volatileStateInfo.CurrentTerm + 1,
-		LastElectionReset: time.Now(),
-		VotedFor:          node.id,
-	})
+	node.volatileStateInfo.State = Candidate
+	node.volatileStateInfo.CurrentTerm += 1
+	node.volatileStateInfo.LastElectionReset = time.Now()
+	node.volatileStateInfo.VotedFor = node.id
 
-	DebuggerLog("Node %v: startElection before readCurrentVolatileStateInfo", node.id)
+	DebuggerLog("Node %v: startElection before getVolatileStateInfo", node.id)
 
-	nodeInfo := node.readCurrentVolatileStateInfo()
-
-	savedCurrentTerm := nodeInfo.CurrentTerm
+	savedCurrentTerm := node.volatileStateInfo.CurrentTerm
 
 	DebuggerLog("Node %v: Start election for term %v", node.id, savedCurrentTerm)
 
@@ -289,8 +240,8 @@ func (node *Node) startElection() {
 
 				DebuggerLog("Node %v: Receive RequestVoteReply from %v : %+v", node.id, peerId, reply)
 
-				if nodeInfo.State != Candidate {
-					DebuggerLog("Node %v: state changed to %v, stop sending RequestVote", node.id, nodeInfo.State)
+				if node.volatileStateInfo.State != Candidate {
+					DebuggerLog("Node %v: state changed to %v, stop sending RequestVote", node.id, node.volatileStateInfo.State)
 					return
 				}
 
@@ -311,7 +262,6 @@ func (node *Node) startElection() {
 			}
 		}(peerId)
 	}
-
 }
 
 func (node *Node) HandleStopRPC() {
@@ -352,11 +302,9 @@ func (node *Node) HandleAppendEntriesRPC(args AppendEntriesArgs, reply *AppendEn
 
 func (node *Node) handleStopRunning(op *StopOp) {
 	DebuggerLog("Node %v: run stopOpCh", node.id)
-	newVolStateInfo := node.getVolatileStateInfo()
-	newVolStateInfo.State = Dead
-	// use overwriteCurrentVolatileStateInfo instead of writeCurrentVolatileStateInfo to avoid deadlock
-	// because the stop signal is still blocking the select loop stop channel case
-	node.overwriteCurrentVolatileStateInfo(newVolStateInfo)
+
+	node.volatileStateInfo.State = Dead
+
 	DebuggerLog("Node %v: run stopOpCh before reply", node.id)
 	DebuggerLog("Node %v: run stopOpCh done", node.id)
 	op.reply <- true
@@ -368,8 +316,6 @@ func (node *Node) transitionToFollower(term int) {
 	node.volatileStateInfo.CurrentTerm = term
 	node.volatileStateInfo.VotedFor = -1
 	node.volatileStateInfo.LastElectionReset = time.Now()
-
-	go node.runElectionTimer()
 }
 
 func (node *Node) transitionToLeader() {
@@ -394,14 +340,13 @@ func (node *Node) transitionToLeader() {
 
 func (node *Node) sendHeartbeats() {
 	DebuggerLog("Node %v: send heartbeats, try to read current volatile info", node.id)
-	DebuggerLog("Node %v: send heartbeats before readCurrentVolatileStateInfo", node.id)
-	nodeInfo := node.readCurrentVolatileStateInfo()
+	DebuggerLog("Node %v: send heartbeats before getVolatileStateInfo", node.id)
 
-	if nodeInfo.State != Leader {
+	if node.volatileStateInfo.State != Leader {
 		return
 	}
 
-	savedCurrentTerm := nodeInfo.CurrentTerm
+	savedCurrentTerm := node.volatileStateInfo.CurrentTerm
 
 	for _, peerId := range node.peers {
 		args := AppendEntriesArgs{
@@ -428,60 +373,14 @@ func (node *Node) Report() (id int, term int, isLeader bool) {
 	// Wait for all nodes in the cluster to be ready for incoming signals
 	node.allNodesAreReadyForIncomingSignal.Wait()
 
-	DebuggerLog("Node %v: report, before readCurrentVolatileStateInfo", node.id)
-	nodeInfo := node.readCurrentVolatileStateInfo()
-	DebuggerLog("Node %v: report info: %+v", node.id, nodeInfo)
-	return node.id, nodeInfo.CurrentTerm, nodeInfo.State == Leader
+	DebuggerLog("Node %v: report, before getVolatileStateInfo", node.id)
+	DebuggerLog("Node %v: report info: %+v", node.id, node.volatileStateInfo)
+	return node.id, node.volatileStateInfo.CurrentTerm, node.volatileStateInfo.State == Leader
 }
 
-func (node *Node) overwriteCurrentVolatileStateInfo(update VolatileStateInfo) {
-	node.volatileStateInfo.State = update.State
-	node.volatileStateInfo.CurrentTerm = update.CurrentTerm
-	node.volatileStateInfo.LastElectionReset = update.LastElectionReset
-	node.volatileStateInfo.VotedFor = update.VotedFor
-}
-
-func (node *Node) handleInfoWrite(op *WriteInfoOp) {
-	DebuggerLog("Node %v: run nodeInfoWriteCh update: %+v", node.id, op.info)
-	node.overwriteCurrentVolatileStateInfo(op.info)
-	op.reply <- true
-	DebuggerLog("Node %v: run nodeInfoWriteCh done", node.id)
-}
-
-func (node *Node) getVolatileStateInfo() VolatileStateInfo {
-	return VolatileStateInfo{
-		State:             node.volatileStateInfo.State,
-		CurrentTerm:       node.volatileStateInfo.CurrentTerm,
-		LastElectionReset: node.volatileStateInfo.LastElectionReset,
-		VotedFor:          node.volatileStateInfo.VotedFor,
+func (node *Node) handleElectionTicker() {
+	if node.volatileStateInfo.State != Candidate && node.volatileStateInfo.State != Follower {
+		DebuggerLog("Node %v: Election timer bailed out because node is not candidate or follower", node.id)
+		return
 	}
-}
-
-func (node *Node) readCurrentVolatileStateInfo() VolatileStateInfo {
-	DebuggerLog("Node %v: readCurrentVolatileStateInfo", node.id)
-	readInfoOp := &ReadInfoOp{
-		reply: make(chan VolatileStateInfo),
-	}
-	DebuggerLog("Node %v: readCurrentVolatileStateInfo right before nodeInfoReadCh", node.id)
-	node.readInfoOpCh <- readInfoOp
-	DebuggerLog("Node %v: right after nodeInfoReadCh", node.id)
-	return <-readInfoOp.reply
-}
-
-func (node *Node) writeCurrentVolatileStateInfo(update VolatileStateInfo) {
-	writeInfoOp := &WriteInfoOp{
-		info:  update,
-		reply: make(chan bool),
-	}
-	DebuggerLog("Node %v: writeCurrentVolatileStateInfo right before nodeInfoWriteCh", node.id)
-	node.writeInfoOpCh <- writeInfoOp
-	<-writeInfoOp.reply
-}
-
-func (node *Node) handleInfoRead(op *ReadInfoOp) {
-	DebuggerLog("Node %v: handleInfoRead", node.id)
-	nodeInfo := node.getVolatileStateInfo()
-	DebuggerLog("Node %v: run nodeInfoReadCh nodeInfo: %+v", node.id, nodeInfo)
-	op.reply <- nodeInfo
-	DebuggerLog("Node %v: run nodeInfoReadCh done", node.id)
 }
