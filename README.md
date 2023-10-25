@@ -9,6 +9,10 @@ A Fault-Tolerant Key/Value Storage System with Raft Consensus Algorithm
 ## Run Tests & See Goroutine Stack Dump
 
 ```bash
+# Turn on debug logger
+./run_tests.sh -debug
+
+# Turn off debug logger
 ./run_tests.sh
 ```
 

@@ -1,12 +1,30 @@
 #!/bin/bash
 
+# Set the initial value for IsDebugMode
+IsDebugMode=""
+
+# Check if the -debug flag is provided
+while [ "$1" != "" ]; do
+    case $1 in
+        -debug )
+            IsDebugMode="true"
+            ;;
+    esac
+    shift
+done
+
 # Change directory to 'raft'
 cd raft || exit
 
 echo "Go to your browser at http://localhost:6060/debug/pprof/goroutine?debug=2 to see the goroutine stack dump."
 
-# Run the tests with profiling
-go test -v -run TestElectionBasic -bench=. -cpuprofile=cpu.pprof -memprofile=mem.pprof
+
+# When you run your script with the -debug flag, it will set IsDebugMode to "true," enabling debug logging. If you run your script without the -debug flag, IsDebugMode will remain empty, and debug logging will be disabled.
+IsDebugMode=$IsDebugMode go test -v -run TestElectionBasic -bench=. -cpuprofile=cpu.pprof -memprofile=mem.pprof
+IsDebugMode=$IsDebugMode go test -v -run TestElectionLeaderDisconnect -bench=. -cpuprofile=cpu.pprof -memprofile=mem.pprof
+IsDebugMode=$IsDebugMode go test -v -run TestElectionLeaderAndAnotherDisconnect -bench=. -cpuprofile=cpu.pprof -memprofile=mem.pprof
+IsDebugMode=$IsDebugMode go test -v -run TestDisconnectAllThenRestore -bench=. -cpuprofile=cpu.pprof -memprofile=mem.pprof
+IsDebugMode=$IsDebugMode go test -v -run TestElectionLeaderDisconnectThenReconnect -bench=. -cpuprofile=cpu.pprof -memprofile=mem.pprof
 
 # Open the browser with the pprof URL
 if [[ $? -eq 0 ]]; then

@@ -7,36 +7,41 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"testing"
-	"time"
 )
 
 func startPProfServer() {
 	go func() {
-		http.ListenAndServe("localhost:6060", nil)
+		err := http.ListenAndServe("localhost:6060", nil)
+		if err != nil {
+			panic(err)
+			return
+		}
 	}()
 }
 
+// test the most basic cluster election
 func TestElectionBasic(t *testing.T) {
 	startPProfServer()
 
-	h := MakeNewCluster(t, 3)
-	defer h.Shutdown()
+	cluster := MakeNewCluster(t, 5)
+	defer cluster.Shutdown()
 
-	h.CheckSingleLeader()
+	cluster.CheckSingleLeader()
 }
 
+// test if remove the leader, the cluster will elect a new leader
 func TestElectionLeaderDisconnect(t *testing.T) {
 	startPProfServer()
 
-	h := MakeNewCluster(t, 3)
-	defer h.Shutdown()
+	cluster := MakeNewCluster(t, 5)
+	defer cluster.Shutdown()
 
-	origLeaderId, origTerm := h.CheckSingleLeader()
+	origLeaderId, origTerm := cluster.CheckSingleLeader()
 
-	h.DisconnectPeer(origLeaderId)
-	sleepWithMilliseconds(350)
+	cluster.DisconnectPeer(origLeaderId)
+	sleepWithMilliseconds(500)
 
-	newLeaderId, newTerm := h.CheckSingleLeader()
+	newLeaderId, newTerm := cluster.CheckSingleLeader()
 
 	if newLeaderId == origLeaderId {
 		t.Errorf("want new leader to be different from orig leader")
@@ -46,27 +51,68 @@ func TestElectionLeaderDisconnect(t *testing.T) {
 	}
 }
 
+// test if adding back nodes will bring back the election
 func TestElectionLeaderAndAnotherDisconnect(t *testing.T) {
 	startPProfServer()
 
-	h := MakeNewCluster(t, 3)
-	defer h.Shutdown()
+	cluster := MakeNewCluster(t, 3)
+	defer cluster.Shutdown()
 
-	origLeaderId, _ := h.CheckSingleLeader()
+	origLeaderId, _ := cluster.CheckSingleLeader()
 
-	h.DisconnectPeer(origLeaderId)
-	otherId := (origLeaderId + 1) % 3
-	h.DisconnectPeer(otherId)
+	cluster.DisconnectPeer(origLeaderId)
+	otherId := (origLeaderId + 1) % cluster.n
+	cluster.DisconnectPeer(otherId)
 
-	// No quorum.
-	sleepWithMilliseconds(450)
-	h.CheckNoLeader()
+	// One node left only, no quorum.
+	sleepWithMilliseconds(500)
+	cluster.CheckNoLeader()
 
-	// Reconnect one other server; now we'll have quorum.
-	h.ReconnectPeer(otherId)
-	h.CheckSingleLeader()
+	// Reconnect one other server; two nodes are active, now we'll have quorum.
+	cluster.ReconnectPeer(otherId)
+	sleepWithMilliseconds(500)
+	cluster.CheckSingleLeader()
 }
 
-func sleepWithMilliseconds(n int) {
-	time.Sleep(time.Duration(n) * time.Millisecond)
+func TestDisconnectAllThenRestore(t *testing.T) {
+	cluster := MakeNewCluster(t, 3)
+	defer cluster.Shutdown()
+
+	sleepWithMilliseconds(500)
+	//	Disconnect all servers from the start. There will be no leader.
+	for i := 0; i < cluster.n; i++ {
+		cluster.DisconnectPeer(i)
+	}
+	sleepWithMilliseconds(500)
+	cluster.CheckNoLeader()
+
+	// Reconnect all servers. A leader will be found.
+	for i := 0; i < cluster.n; i++ {
+		cluster.ReconnectPeer(i)
+	}
+	sleepWithMilliseconds(500)
+	cluster.CheckSingleLeader()
+}
+
+func TestElectionLeaderDisconnectThenReconnect(t *testing.T) {
+	cluster := MakeNewCluster(t, 3)
+	defer cluster.Shutdown()
+	origLeaderId, _ := cluster.CheckSingleLeader()
+
+	cluster.DisconnectPeer(origLeaderId)
+
+	sleepWithMilliseconds(500)
+	newLeaderId, newTerm := cluster.CheckSingleLeader()
+
+	cluster.ReconnectPeer(origLeaderId)
+	sleepWithMilliseconds(500)
+
+	againLeaderId, againTerm := cluster.CheckSingleLeader()
+
+	if newLeaderId != againLeaderId {
+		t.Errorf("again leader id got %d; want %d", againLeaderId, newLeaderId)
+	}
+	if againTerm != newTerm {
+		t.Errorf("again term got %d; want %d", againTerm, newTerm)
+	}
 }

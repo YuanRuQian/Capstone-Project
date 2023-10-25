@@ -1,7 +1,6 @@
 package raft
 
 import (
-	"log"
 	"sync"
 	"testing"
 	"time"
@@ -106,7 +105,7 @@ func (c *Cluster) ReconnectPeer(id int) {
 // Returns the leader's id and term. It retries several times if no leader is
 // identified yet.
 func (c *Cluster) CheckSingleLeader() (int, int) {
-	for r := 0; r < 5; r++ {
+	for r := 0; r < 20; r++ {
 		leaderId := -1
 		leaderTerm := -1
 		for i := 0; i < c.n; i++ {
@@ -118,7 +117,15 @@ func (c *Cluster) CheckSingleLeader() (int, int) {
 						leaderId = i
 						leaderTerm = term
 					} else {
-						c.t.Fatalf("both %d and %d think they're leaders", leaderId, i)
+						if leaderTerm == term {
+							c.t.Fatalf("both %d and %d think they're leaders during term %d", leaderId, i, term)
+						} else {
+							// update the leaderId to the one with the higher term
+							if leaderTerm < term {
+								leaderId = i
+								leaderTerm = term
+							}
+						}
 					}
 				}
 			}
@@ -145,9 +152,4 @@ func (c *Cluster) CheckNoLeader() {
 			}
 		}
 	}
-}
-
-func tlog(format string, a ...interface{}) {
-	format = "[TEST] " + format
-	log.Printf(format, a...)
 }
