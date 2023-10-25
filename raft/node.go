@@ -129,7 +129,6 @@ func (node *Node) run() {
 
 		for isRunning {
 			select {
-
 			case <-node.electionStatusCheckerTicker.C:
 				node.handleElectionStatusCheck()
 
@@ -220,41 +219,42 @@ func (node *Node) startElection() {
 
 	votesReceived := 1
 
+	args := RequestVoteArgs{
+		Term:        node.volatileStateInfo.CurrentTerm,
+		CandidateID: node.id,
+	}
+
 	for _, peerId := range node.peers {
-		go func(peerId int) {
-			args := RequestVoteArgs{
-				Term:        node.volatileStateInfo.CurrentTerm,
-				CandidateID: node.id,
+
+		var reply RequestVoteReply
+		DebuggerLog("Node %v: Send RequestVote to %v", node.id, peerId)
+
+		// service method: rpc proxy delegate method, not the node's method
+		if err := node.server.Call(peerId, "Node.RequestVote", args, &reply); err == nil {
+
+			DebuggerLog("Node %v: Receive RequestVoteReply from %v : %+v", node.id, peerId, reply)
+
+			if node.volatileStateInfo.State != Candidate {
+				DebuggerLog("Node %v: state changed to %v, stop sending RequestVote", node.id, node.volatileStateInfo.State)
+				return
 			}
-			var reply RequestVoteReply
-			DebuggerLog("Node %v: Send RequestVote to %v", node.id, peerId)
 
-			// service method: rpc proxy delegate method, not the node's method
-			if err := node.server.Call(peerId, "Node.RequestVote", args, &reply); err == nil {
-
-				DebuggerLog("Node %v: Receive RequestVoteReply from %v : %+v", node.id, peerId, reply)
-
-				if node.volatileStateInfo.State != Candidate {
-					DebuggerLog("Node %v: state changed to %v, stop sending RequestVote", node.id, node.volatileStateInfo.State)
-					return
-				}
-
-				if reply.Term > node.volatileStateInfo.CurrentTerm {
-					DebuggerLog("Node %v: term out of date in RequestVoteReply", node.id)
-					node.transitionToFollower(reply.Term)
-					return
-				} else if reply.Term == node.volatileStateInfo.CurrentTerm {
-					if reply.VoteGranted {
-						votesReceived += 1
-						if votesReceived*2 > len(node.peers)+1 {
-							DebuggerLog("Node %v: wins election with %d votes", node.id, votesReceived)
-							node.transitionToLeader()
-							return
-						}
+			if reply.Term > node.volatileStateInfo.CurrentTerm {
+				DebuggerLog("Node %v: term out of date in RequestVoteReply", node.id)
+				node.transitionToFollower(reply.Term)
+				return
+			} else if reply.Term == node.volatileStateInfo.CurrentTerm {
+				if reply.VoteGranted {
+					votesReceived += 1
+					if votesReceived*2 > len(node.peers)+1 {
+						DebuggerLog("Node %v: wins election with %d votes", node.id, votesReceived)
+						node.transitionToLeader()
+						return
 					}
 				}
 			}
-		}(peerId)
+		}
+
 	}
 
 	node.startElectionTimer()
@@ -319,6 +319,7 @@ func (node *Node) transitionToLeader() {
 func (node *Node) Report() (id int, term int, isLeader bool) {
 	// Wait for all nodes in the cluster to be ready for incoming signals
 	node.allNodesAreReadyForIncomingSignal.Wait()
+	DebuggerLog("Node %v: begin to report", node.id)
 	return node.id, node.volatileStateInfo.CurrentTerm, node.volatileStateInfo.State == Leader
 }
 

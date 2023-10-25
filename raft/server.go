@@ -58,7 +58,7 @@ func (s *Server) Serve() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("Server %v listening at %s", s.serverId, s.listener.Addr())
+	DebuggerLog("Server %v listening at %s", s.serverId, s.listener.Addr())
 	s.mu.Unlock()
 
 	s.serverClusterWaitGroup.Add(1)
