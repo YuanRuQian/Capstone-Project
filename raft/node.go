@@ -125,9 +125,9 @@ func (node *Node) run() {
 		leaderSendHeartbeatTicker := time.NewTicker(20 * time.Millisecond)
 		defer leaderSendHeartbeatTicker.Stop()
 
-		running := true
+		isRunning := true
 
-		for running {
+		for isRunning {
 			select {
 
 			case <-node.electionStatusCheckerTicker.C:
@@ -139,7 +139,9 @@ func (node *Node) run() {
 			case stopOp := <-node.stopOpCh:
 				node.handleStopRunning(stopOp)
 				leaderSendHeartbeatTicker.Stop()
-				running = false
+				node.electionStatusCheckerTicker.Stop()
+				isRunning = false
+				DebuggerLog("Node %v: stop running", node.id)
 
 			case appendEntriesOp := <-node.appendEntriesOpCh:
 				node.handleAppendEntries(appendEntriesOp)
@@ -148,6 +150,8 @@ func (node *Node) run() {
 				node.handleRequestVote(requestVoteOp)
 			}
 		}
+
+		DebuggerLog("Node %v: end single thread listener", node.id)
 	}()
 
 }

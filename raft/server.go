@@ -98,6 +98,7 @@ func (s *Server) DisconnectAll() {
 
 // Shutdown closes the server and waits for it to shut down properly.
 func (s *Server) Shutdown() {
+	DebuggerLog(fmt.Sprintf("Server %v shutdown", s.serverId))
 	s.node.HandleStopRPC()
 	close(s.quit)
 	s.listener.Close()

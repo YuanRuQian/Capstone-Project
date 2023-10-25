@@ -70,7 +70,7 @@ func (c *Cluster) Shutdown() {
 		c.connected[i] = false
 	}
 	for i := 0; i < c.n; i++ {
-		c.cluster[i].Shutdown()
+		go c.cluster[i].Shutdown()
 	}
 }
 
@@ -124,6 +124,7 @@ func (c *Cluster) CheckSingleLeader() (int, int) {
 			}
 		}
 		if leaderId >= 0 {
+			DebuggerLog("CheckSingleLeader: return with leaderId %d leaderTerm %d", leaderId, leaderTerm)
 			return leaderId, leaderTerm
 		}
 		time.Sleep(150 * time.Millisecond)
