@@ -229,6 +229,8 @@ func (node *Node) startElection() {
 		var reply RequestVoteReply
 		DebuggerLog("Node %v: Send RequestVote to %v", node.id, peerId)
 
+		// TODO: response also in the select, no RPC, just send, wait for response to come back
+		// 	TODO: handle counting votes in the select
 		// service method: rpc proxy delegate method, not the node's method
 		if err := node.server.Call(peerId, "Node.RequestVote", args, &reply); err == nil {
 
@@ -333,6 +335,8 @@ func (node *Node) handleLeaderSendHeartbeatTicker() {
 		LeaderID: node.id,
 	}
 
+	// TODO: network interface, use channels
+	// TODO: just send
 	for _, peerId := range node.peers {
 		var reply AppendEntriesReply
 		if err := node.server.Call(peerId, "Node.AppendEntries", args, &reply); err == nil {
