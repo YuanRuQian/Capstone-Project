@@ -5,15 +5,22 @@ type ReadInfoOp struct {
 }
 
 type RequestVoteOp struct {
-	args  RequestVoteArgs
-	reply chan RequestVoteReply
+	args RequestVoteArgs
 }
 
 type AppendEntriesOp struct {
-	args  AppendEntriesArgs
-	reply chan AppendEntriesReply
+	args AppendEntriesArgs
 }
 
 type StopOp struct {
 	reply chan bool
+}
+
+type AppendEntriesReplyOp struct {
+	args  AppendEntriesArgs
+	reply AppendEntriesReply
+}
+
+type RequestVoteReplyOp struct {
+	reply RequestVoteReply
 }

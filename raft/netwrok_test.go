@@ -68,7 +68,7 @@ func TestElectionLeaderAndAnotherDisconnect(t *testing.T) {
 	sleepWithMilliseconds(500)
 	cluster.CheckNoLeader()
 
-	// Reconnect one other server; two nodes are active, now we'll have quorum.
+	// Reconnect one other networkInterface; two nodes are active, now we'll have quorum.
 	cluster.ReconnectPeer(otherId)
 	sleepWithMilliseconds(500)
 	cluster.CheckSingleLeader()
