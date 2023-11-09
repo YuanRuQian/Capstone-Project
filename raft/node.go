@@ -135,6 +135,8 @@ func (node *Node) run() {
 		isRunning := true
 
 		for isRunning {
+			// TODO: check timestamps (sending?)
+			// TODO: recievier end not processing fast enough
 			select {
 			case <-node.electionStatusCheckerTicker.C:
 				node.handleElectionStatusCheck()
@@ -166,6 +168,8 @@ func (node *Node) run() {
 				node.handleRequestVoteReply(requestVoteReplyOp)
 			}
 		}
+
+		// TODO: check timestamps
 
 		DebuggerLog("Node %v: end single thread listener", node.id)
 	}()
@@ -249,6 +253,8 @@ func (node *Node) startElection() {
 		CandidateID: node.id,
 	}
 
+	// TODO: use send with goroutinues for all sending
+
 	for _, peerId := range node.peers {
 		DebuggerLog("Node %v: Send RequestVote to %v", node.id, peerId)
 
@@ -273,6 +279,7 @@ func (node *Node) HandleRequestVoteRPC(args RequestVoteArgs) error {
 		args: args,
 	}
 	node.requestVoteOpCh <- requestVoteOp
+	DebuggerLog("Node %v: HandleRequestVoteRPC end", node.id)
 	return nil
 }
 
@@ -282,6 +289,7 @@ func (node *Node) HandleAppendEntriesRPC(args AppendEntriesArgs) error {
 		args: args,
 	}
 	node.appendEntriesOpCh <- appendEntriesOp
+	DebuggerLog("Node %v: HandleAppendEntriesRPC end", node.id)
 	return nil
 }
 
@@ -404,6 +412,7 @@ func (node *Node) HandleAppendEntriesReplyRPC(replierId int, args AppendEntriesA
 		reply: reply,
 	}
 	node.appendEntriesReplyOpCh <- appendEntriesOp
+	DebuggerLog("Node %v: HandleAppendEntriesReplyRPC end", node.id)
 }
 
 func (node *Node) HandleRequestVoteReplyRPC(replierId int, reply RequestVoteReply) {
@@ -412,4 +421,5 @@ func (node *Node) HandleRequestVoteReplyRPC(replierId int, reply RequestVoteRepl
 		reply: reply,
 	}
 	node.requestVoteReplyOpCh <- requestVoteReplyOp
+	DebuggerLog("Node %v: HandleRequestVoteReplyRPC end", node.id)
 }
