@@ -1,7 +1,10 @@
 package raft
 
 import (
+	"encoding/csv"
 	"fmt"
+	"os"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -117,6 +120,8 @@ func (m AppendEntriesArgs) isHeartbeat() bool {
 	return 0 == len(m.Entries)
 }
 
+// TODO: recievier end not processing fast enough
+
 func (node *Node) run() {
 	<-node.isReadyToRun
 
@@ -135,45 +140,94 @@ func (node *Node) run() {
 		isRunning := true
 
 		for isRunning {
-			// TODO: check timestamps (sending?)
-			// TODO: recievier end not processing fast enough
+			// TODO: start the timestamp
+
+			startTime := time.Now()
+
 			select {
 			case <-node.electionStatusCheckerTicker.C:
 				node.handleElectionStatusCheck()
+				node.printElapsedTime("handleElectionStatusCheck", startTime)
 
 			case <-leaderSendHeartbeatTicker.C:
 				node.handleLeaderSendHeartbeatTicker()
+				node.printElapsedTime("handleLeaderSendHeartbeatTicker", startTime)
 
 			case stopOp := <-node.stopOpCh:
 				node.handleStopRunning(stopOp)
 				leaderSendHeartbeatTicker.Stop()
 				node.electionStatusCheckerTicker.Stop()
 				isRunning = false
+				node.printElapsedTime("handleStopRunning", startTime)
 				DebuggerLog("Node %v: stop running", node.id)
 
 			case appendEntriesOp := <-node.appendEntriesOpCh:
 				DebuggerLog("Node %v: handle append entries in main loop", node.id)
 				node.handleAppendEntries(appendEntriesOp)
+				node.printElapsedTime("handleAppendEntries", startTime)
 
 			case requestVoteOp := <-node.requestVoteOpCh:
 				DebuggerLog("Node %v: handle request vote in main loop", node.id)
 				node.handleRequestVote(requestVoteOp)
+				node.printElapsedTime("handleRequestVote", startTime)
 
 			case appendEntriesReplyOp := <-node.appendEntriesReplyOpCh:
 				DebuggerLog("Node %v: handle append entries reply in main loop", node.id)
 				node.handleAppendEntriesReply(appendEntriesReplyOp)
+				node.printElapsedTime("handleAppendEntriesReply", startTime)
 
 			case requestVoteReplyOp := <-node.requestVoteReplyOpCh:
 				DebuggerLog("Node %v: handle request vote reply in main loop", node.id)
 				node.handleRequestVoteReply(requestVoteReplyOp)
+				node.printElapsedTime("handleRequestVoteReply", startTime)
 			}
 		}
 
-		// TODO: check timestamps
+		// TODO: end the timestamps, print out how much time it takes to process the request
 
 		DebuggerLog("Node %v: end single thread listener", node.id)
 	}()
 
+}
+
+func (node *Node) printElapsedTime(operation string, startTime time.Time) {
+	elapsed := time.Since(startTime)
+	DebuggerLog("Node %v: %s took %s", node.id, operation, elapsed)
+
+	// Append the result to the timestamp.csv file
+	node.writeToTimestampFile(operation, elapsed)
+}
+
+func (node *Node) writeToTimestampFile(operation string, elapsed time.Duration) {
+
+	fileName := "timestamp.csv"
+	file, err := os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+	if err != nil {
+		DebuggerLog("Error opening file %s: %v", fileName, err)
+		return
+	}
+	defer file.Close()
+
+	// Use a mutex to ensure safe concurrent writes to the file
+	var mutex sync.Mutex
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+
+	// Convert elapsed time to microseconds
+	elapsedMicroseconds := elapsed.Microseconds()
+
+	record := []string{
+		strconv.Itoa(node.id),
+		operation,
+		strconv.FormatInt(elapsedMicroseconds, 10),
+	}
+
+	if err := writer.Write(record); err != nil {
+		DebuggerLog("Error writing to file %s: %v", fileName, err)
+	}
 }
 
 func (node *Node) handleAppendEntries(op *AppendEntriesOp) {
@@ -351,6 +405,7 @@ func (node *Node) handleElectionStatusCheck() {
 	}
 
 	if timePassedSinceLastReset := time.Since(node.volatileStateInfo.LastElectionReset); timePassedSinceLastReset >= node.electionTimeout {
+		DebuggerLog("Node %v: Election timeout, start election", node.id)
 		node.startElection()
 		return
 	}

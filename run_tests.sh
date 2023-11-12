@@ -1,9 +1,8 @@
 #!/bin/bash
 
-# Set the initial value for IsDebugMode
 IsDebugMode=""
 
-# Check if the -debug flag is provided
+# Check for flags
 while [ "$1" != "" ]; do
     case $1 in
         -debug )
@@ -12,6 +11,12 @@ while [ "$1" != "" ]; do
     esac
     shift
 done
+
+# Example usage
+if [ "$IsDebugMode" = "true" ]; then
+    echo "Debug mode is enabled"
+fi
+
 
 # Change directory to 'raft'
 cd raft || exit
