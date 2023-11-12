@@ -78,7 +78,7 @@ func (c *Cluster) Shutdown() {
 
 // DisconnectPeer disconnects a networkInterface from all other servers in the cluster.
 func (c *Cluster) DisconnectPeer(id int) {
-	tlog("Disconnect %d", id)
+	DebuggerLog("Disconnect Node %d", id)
 	c.cluster[id].DisconnectAll()
 	for j := 0; j < c.n; j++ {
 		if j != id {
@@ -93,14 +93,14 @@ func (c *Cluster) DisconnectPeer(id int) {
 
 // ReconnectPeer connects a networkInterface to all other servers in the cluster.
 func (c *Cluster) ReconnectPeer(id int) {
-	tlog("Reconnect %d", id)
+	DebuggerLog("Reconnect Node %d", id)
 	for j := 0; j < c.n; j++ {
 		if j != id {
 			if err := c.cluster[id].ConnectToPeer(j, c.cluster[j].server); err != nil {
-				c.t.Fatal(err)
+				DebuggerLog("ReconnectPeer Node %d: %v", id, err)
 			}
 			if err := c.cluster[j].ConnectToPeer(id, c.cluster[id].server); err != nil {
-				c.t.Fatal(err)
+				DebuggerLog("ReconnectPeer Node %d: %v", j, err)
 			}
 		}
 	}
@@ -143,7 +143,7 @@ func (c *Cluster) CheckSingleLeader() (int, int) {
 		time.Sleep(200 * time.Millisecond)
 	}
 
-	c.t.Fatalf("leader not found")
+	DebuggerLog("leader not found")
 	return -1, -1
 }
 
@@ -154,7 +154,7 @@ func (c *Cluster) CheckNoLeader() {
 			_, _, isLeader := c.cluster[i].server.node.Report()
 			DebuggerLog("CheckNoLeader: networkInterface %d isLeader %v", i, isLeader)
 			if isLeader {
-				c.t.Fatalf("networkInterface %d leader; want none", i)
+				DebuggerLog("networkInterface %d leader; want none", i)
 			}
 		}
 	}

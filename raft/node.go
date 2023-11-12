@@ -140,8 +140,6 @@ func (node *Node) run() {
 		isRunning := true
 
 		for isRunning {
-			// TODO: start the timestamp
-
 			startTime := time.Now()
 
 			select {
@@ -183,8 +181,6 @@ func (node *Node) run() {
 			}
 		}
 
-		// TODO: end the timestamps, print out how much time it takes to process the request
-
 		DebuggerLog("Node %v: end single thread listener", node.id)
 	}()
 
@@ -195,7 +191,7 @@ func (node *Node) printElapsedTime(operation string, startTime time.Time) {
 	DebuggerLog("Node %v: %s took %s", node.id, operation, elapsed)
 
 	// Append the result to the timestamp.csv file
-	node.writeToTimestampFile(operation, elapsed)
+	// node.writeToTimestampFile(operation, elapsed)
 }
 
 func (node *Node) writeToTimestampFile(operation string, elapsed time.Duration) {
@@ -206,7 +202,12 @@ func (node *Node) writeToTimestampFile(operation string, elapsed time.Duration) 
 		DebuggerLog("Error opening file %s: %v", fileName, err)
 		return
 	}
-	defer file.Close()
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+			panic(fmt.Sprintf("Error closing file %s: %v", fileName, err))
+		}
+	}(file)
 
 	// Use a mutex to ensure safe concurrent writes to the file
 	var mutex sync.Mutex
@@ -307,15 +308,10 @@ func (node *Node) startElection() {
 		CandidateID: node.id,
 	}
 
-	// TODO: use send with goroutinues for all sending
-
 	for _, peerId := range node.peers {
 		DebuggerLog("Node %v: Send RequestVote to %v", node.id, peerId)
 
-		err := node.networkInterface.RequestVote(peerId, args)
-		if err != nil {
-			panic(fmt.Sprintf("Error in RequestVote RPC: %v", err))
-		}
+		go node.networkInterface.RequestVote(peerId, args)
 	}
 }
 
@@ -386,10 +382,7 @@ func (node *Node) handleLeaderSendHeartbeatTicker() {
 	}
 
 	for _, peerId := range node.peers {
-		err := node.networkInterface.AppendEntries(peerId, args)
-		if err != nil {
-			panic(fmt.Sprintf("Error in AppendEntries RPC: %v", err))
-		}
+		go node.networkInterface.AppendEntries(peerId, args)
 	}
 }
 

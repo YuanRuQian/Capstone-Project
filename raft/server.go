@@ -115,36 +115,36 @@ func (networkInterface *NetworkInterface) prePRCShutdownCheck() bool {
 	return networkInterface.hasBeenShutdown
 }
 
-func (networkInterface *NetworkInterface) RequestVote(id int, args RequestVoteArgs) error {
+func (networkInterface *NetworkInterface) RequestVote(id int, args RequestVoteArgs) {
 	if hasBeenShutdown := networkInterface.prePRCShutdownCheck(); hasBeenShutdown {
 		DebuggerLog(fmt.Sprintf("NetworkInterface %v has been shutdown, no more RequestVote", networkInterface.serverId))
-		return nil
+		return
 	}
 
 	if networkInterface.peerServers[id] == nil || networkInterface.peerServers[id].node == nil {
-		return nil
+		return
 	}
 
 	err := networkInterface.peerServers[id].node.HandleRequestVoteRPC(args)
 	if err != nil {
 		panic(fmt.Sprintf("Error in RequestVote RPC: %v", err))
-		return nil
 	}
-	return err
 }
 
-func (networkInterface *NetworkInterface) AppendEntries(id int, args AppendEntriesArgs) error {
+func (networkInterface *NetworkInterface) AppendEntries(id int, args AppendEntriesArgs) {
 	if hasBeenShutdown := networkInterface.prePRCShutdownCheck(); hasBeenShutdown {
 		DebuggerLog(fmt.Sprintf("NetworkInterface %v has been shutdown, no more AppendEntries", networkInterface.serverId))
-		return nil
+		return
 	}
 
 	if networkInterface.peerServers[id] == nil || networkInterface.peerServers[id].node == nil {
-		return nil
+		return
 	}
 
 	err := networkInterface.peerServers[id].node.HandleAppendEntriesRPC(args)
-	return err
+	if err != nil {
+		panic(fmt.Sprintf("Error in AppendEntries RPC: %v", err))
+	}
 }
 
 func (networkInterface *NetworkInterface) SendAppendEntriesReply(replierId, destinationId int, args AppendEntriesArgs, reply AppendEntriesReply) error {
