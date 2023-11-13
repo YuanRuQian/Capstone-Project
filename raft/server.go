@@ -2,172 +2,175 @@ package raft
 
 import (
 	"fmt"
-	"log"
-	"math/rand"
-	"net"
-	"net/rpc"
 	"sync"
-	"time"
 )
 
 type Server struct {
+	node *Node
+}
+
+func (s Server) HandleStopRPC() {
+	s.node.HandleStopRPC()
+}
+
+type NetworkInterface struct {
 	mu sync.Mutex
 
-	serverId int
-	peerIds  []int
+	serverId    int
+	peerIds     []int
+	peerServers map[int]*Server
 
-	node     *Node
-	rpcProxy *RPCProxy
-
-	rpcServer *rpc.Server
-	listener  net.Listener
-
-	peerClients map[int]*rpc.Client
+	server *Server
 
 	isReadyToStart         <-chan interface{}
 	quit                   chan interface{}
 	serverClusterWaitGroup sync.WaitGroup
 
 	allNodesAreReadyForIncomingSignal *sync.WaitGroup
+
+	hasBeenShutdown bool
 }
 
-func MakeNewServer(serverId int, peerIds []int, ready <-chan interface{}, allNodesAreReadyForIncomingSignal *sync.WaitGroup) *Server {
-	return &Server{
+func MakeNewNetworkInterface(serverId int, peerIds []int, ready <-chan interface{}, allNodesAreReadyForIncomingSignal *sync.WaitGroup) *NetworkInterface {
+	return &NetworkInterface{
 		serverId:                          serverId,
 		peerIds:                           peerIds,
-		peerClients:                       make(map[int]*rpc.Client),
+		peerServers:                       make(map[int]*Server),
 		isReadyToStart:                    ready,
 		quit:                              make(chan interface{}),
 		allNodesAreReadyForIncomingSignal: allNodesAreReadyForIncomingSignal,
+		hasBeenShutdown:                   true,
 	}
 }
 
-func (s *Server) Serve() {
-	s.mu.Lock()
-	s.node = MakeNewNode(s.serverId, s.peerIds, s, s.isReadyToStart, s.allNodesAreReadyForIncomingSignal)
+func (networkInterface *NetworkInterface) Serve() {
+	networkInterface.mu.Lock()
+	node := MakeNewNode(networkInterface.serverId, networkInterface.peerIds, networkInterface, networkInterface.isReadyToStart, networkInterface.allNodesAreReadyForIncomingSignal)
+	networkInterface.server = &Server{node: node}
+	networkInterface.hasBeenShutdown = false
+	networkInterface.mu.Unlock()
 
-	// Create a new RPC server and register a RPCProxy that forwards all methods
-	// to n.node
-	s.rpcServer = rpc.NewServer()
-	s.rpcProxy = &RPCProxy{node: s.node}
-	s.rpcServer.RegisterName("Node", s.rpcProxy)
-
-	var err error
-	// randomly pick a port
-	s.listener, err = net.Listen("tcp", ":0")
-	if err != nil {
-		log.Fatal(err)
-	}
-	DebuggerLog("Server %v listening at %s", s.serverId, s.listener.Addr())
-	s.mu.Unlock()
-
-	s.serverClusterWaitGroup.Add(1)
+	networkInterface.serverClusterWaitGroup.Add(1)
 	go func() {
-		defer s.serverClusterWaitGroup.Done()
+		defer networkInterface.serverClusterWaitGroup.Done()
 
 		for {
-			conn, err := s.listener.Accept()
-			if err != nil {
-				select {
-				case <-s.quit:
-					return
-				default:
-					log.Fatal("accept error:", err)
-				}
+			select {
+			case <-networkInterface.quit:
+				return
+			default:
 			}
-			s.serverClusterWaitGroup.Add(1)
+			networkInterface.serverClusterWaitGroup.Add(1)
 			go func() {
-				s.rpcServer.ServeConn(conn)
-				s.serverClusterWaitGroup.Done()
+				networkInterface.serverClusterWaitGroup.Done()
 			}()
 		}
 	}()
 }
 
-// DisconnectAll closes all the client connections to peers for this server.
-func (s *Server) DisconnectAll() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for id := range s.peerClients {
-		if s.peerClients[id] != nil {
-			s.peerClients[id].Close()
-			s.peerClients[id] = nil
+// DisconnectAll closes all the client connections to peers for this networkInterface.
+func (networkInterface *NetworkInterface) DisconnectAll() {
+	networkInterface.mu.Lock()
+	defer networkInterface.mu.Unlock()
+	for id := range networkInterface.peerServers {
+		if networkInterface.peerServers[id] != nil {
+			networkInterface.peerServers[id] = nil
 		}
 	}
 }
 
-// Shutdown closes the server and waits for it to shut down properly.
-func (s *Server) Shutdown() {
-	DebuggerLog(fmt.Sprintf("Server %v shutdown", s.serverId))
-	s.node.HandleStopRPC()
-	close(s.quit)
-	s.listener.Close()
-	s.serverClusterWaitGroup.Wait()
+// Shutdown closes the networkInterface and waits for it to shut down properly.
+func (networkInterface *NetworkInterface) Shutdown() {
+	DebuggerLog(fmt.Sprintf("NetworkInterface %v shutdown", networkInterface.serverId))
+	networkInterface.mu.Lock()
+	networkInterface.hasBeenShutdown = true
+	networkInterface.mu.Unlock()
+	networkInterface.server.HandleStopRPC()
+	close(networkInterface.quit)
+	networkInterface.serverClusterWaitGroup.Wait()
 }
 
-func (s *Server) GetListenAddr() net.Addr {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.listener.Addr()
-}
-
-func (s *Server) ConnectToPeer(peerId int, addr net.Addr) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.peerClients[peerId] == nil {
-		client, err := rpc.Dial(addr.Network(), addr.String())
-		if err != nil {
-			return err
-		}
-		s.peerClients[peerId] = client
+func (networkInterface *NetworkInterface) ConnectToPeer(peerId int, server *Server) error {
+	networkInterface.mu.Lock()
+	defer networkInterface.mu.Unlock()
+	if networkInterface.peerServers[peerId] == nil {
+		networkInterface.peerServers[peerId] = server
 	}
 	return nil
 }
 
-// DisconnectPeer disconnects this server from the peer identified by peerId.
-func (s *Server) DisconnectPeer(peerId int) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.peerClients[peerId] != nil {
-		err := s.peerClients[peerId].Close()
-		s.peerClients[peerId] = nil
-		return err
+// DisconnectPeer disconnects this networkInterface from the peer identified by peerId.
+func (networkInterface *NetworkInterface) DisconnectPeer(peerId int) error {
+	networkInterface.mu.Lock()
+	defer networkInterface.mu.Unlock()
+	if networkInterface.peerServers[peerId] != nil {
+		networkInterface.peerServers[peerId] = nil
 	}
 	return nil
 }
 
-func (s *Server) Call(id int, serviceMethod string, args interface{}, reply interface{}) error {
-	s.mu.Lock()
-	peer := s.peerClients[id]
-	s.mu.Unlock()
+func (networkInterface *NetworkInterface) prePRCShutdownCheck() bool {
+	networkInterface.mu.Lock()
+	defer networkInterface.mu.Unlock()
+	return networkInterface.hasBeenShutdown
+}
 
-	// If this is called after shutdown (where client.Close is called), it will
-	// return an error.
-	if peer == nil {
-		return fmt.Errorf("call client %d after it's closed", id)
-	} else {
-		return peer.Call(serviceMethod, args, reply)
+func (networkInterface *NetworkInterface) RequestVote(id int, args RequestVoteArgs) {
+	if hasBeenShutdown := networkInterface.prePRCShutdownCheck(); hasBeenShutdown {
+		DebuggerLog(fmt.Sprintf("NetworkInterface %v has been shutdown, no more RequestVote", networkInterface.serverId))
+		return
+	}
+
+	if networkInterface.peerServers[id] == nil || networkInterface.peerServers[id].node == nil {
+		return
+	}
+
+	err := networkInterface.peerServers[id].node.HandleRequestVoteRPC(args)
+	if err != nil {
+		panic(fmt.Sprintf("Error in RequestVote RPC: %v", err))
 	}
 }
 
-// RPCProxy is a trivial pass-thru proxy type for ConsensusModule's RPC methods.
-// It's useful for:
-//   - Simulating a small delay in RPC transmission.
-//   - Avoiding running into https://github.com/golang/go/issues/19957
-//   - Simulating possible unreliable connections by delaying some messages
-//     significantly and dropping others when RAFT_UNRELIABLE_RPC is set.
-type RPCProxy struct {
-	node *Node
+func (networkInterface *NetworkInterface) AppendEntries(id int, args AppendEntriesArgs) {
+	if hasBeenShutdown := networkInterface.prePRCShutdownCheck(); hasBeenShutdown {
+		DebuggerLog(fmt.Sprintf("NetworkInterface %v has been shutdown, no more AppendEntries", networkInterface.serverId))
+		return
+	}
+
+	if networkInterface.peerServers[id] == nil || networkInterface.peerServers[id].node == nil {
+		return
+	}
+
+	err := networkInterface.peerServers[id].node.HandleAppendEntriesRPC(args)
+	if err != nil {
+		panic(fmt.Sprintf("Error in AppendEntries RPC: %v", err))
+	}
 }
 
-func (rpp *RPCProxy) RequestVote(args RequestVoteArgs, reply *RequestVoteReply) error {
-	DebuggerLog(fmt.Sprintf("RPCProxy.RequestVote from server %v: %+v", rpp.node.id, args))
-	time.Sleep(time.Duration(1+rand.Intn(5)) * time.Millisecond)
-	return rpp.node.HandleRequestVoteRPC(args, reply)
+func (networkInterface *NetworkInterface) SendAppendEntriesReply(replierId, destinationId int, args AppendEntriesArgs, reply AppendEntriesReply) error {
+	if hasBeenShutdown := networkInterface.prePRCShutdownCheck(); hasBeenShutdown {
+		DebuggerLog(fmt.Sprintf("NetworkInterface %v has been shutdown, no more SendAppendEntriesReply", networkInterface.serverId))
+		return nil
+	}
+
+	if networkInterface.peerServers[destinationId] == nil || networkInterface.peerServers[destinationId].node == nil {
+		return nil
+	}
+
+	networkInterface.peerServers[destinationId].node.HandleAppendEntriesReplyRPC(replierId, args, reply)
+	return nil
 }
 
-func (rpp *RPCProxy) AppendEntries(args AppendEntriesArgs, reply *AppendEntriesReply) error {
-	DebuggerLog(fmt.Sprintf("RPCProxy.AppendEntries: %+v", args))
-	time.Sleep(time.Duration(1+rand.Intn(5)) * time.Millisecond)
-	return rpp.node.HandleAppendEntriesRPC(args, reply)
+func (networkInterface *NetworkInterface) SendRequestVoteReply(replierId, destinationId int, reply RequestVoteReply) error {
+	if hasBeenShutdown := networkInterface.prePRCShutdownCheck(); hasBeenShutdown {
+		DebuggerLog(fmt.Sprintf("NetworkInterface %v has been shutdown, no more SendRequestVoteReply", networkInterface.serverId))
+		return nil
+	}
+
+	if networkInterface.peerServers[destinationId] == nil || networkInterface.peerServers[destinationId].node == nil {
+		return nil
+	}
+
+	networkInterface.peerServers[destinationId].node.HandleRequestVoteReplyRPC(replierId, reply)
+	return nil
 }

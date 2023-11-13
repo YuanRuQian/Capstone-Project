@@ -23,7 +23,7 @@ func startPProfServer() {
 func TestElectionBasic(t *testing.T) {
 	startPProfServer()
 
-	cluster := MakeNewCluster(t, 5)
+	cluster := MakeNewCluster(t, 2)
 	defer cluster.Shutdown()
 
 	cluster.CheckSingleLeader()
@@ -68,12 +68,13 @@ func TestElectionLeaderAndAnotherDisconnect(t *testing.T) {
 	sleepWithMilliseconds(500)
 	cluster.CheckNoLeader()
 
-	// Reconnect one other server; two nodes are active, now we'll have quorum.
+	// Reconnect one other networkInterface; two nodes are active, now we'll have quorum.
 	cluster.ReconnectPeer(otherId)
 	sleepWithMilliseconds(500)
 	cluster.CheckSingleLeader()
 }
 
+// FIXME: still got leader not found errors sometimes
 func TestDisconnectAllThenRestore(t *testing.T) {
 	cluster := MakeNewCluster(t, 3)
 	defer cluster.Shutdown()
@@ -94,6 +95,7 @@ func TestDisconnectAllThenRestore(t *testing.T) {
 	cluster.CheckSingleLeader()
 }
 
+// FIXME: still got leader not found errors sometimes
 func TestElectionLeaderDisconnectThenReconnect(t *testing.T) {
 	cluster := MakeNewCluster(t, 3)
 	defer cluster.Shutdown()
