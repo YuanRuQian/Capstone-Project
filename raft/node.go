@@ -1,8 +1,10 @@
 package raft
 
 import (
-	"log"
-	"math/rand"
+	"encoding/csv"
+	"fmt"
+	"os"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -16,211 +18,47 @@ const (
 	Dead
 )
 
-// TODO: adjust the heartbeat interval
-
-// TODO: Fine-Grained Locking
-// TODO: Check synchronization when launching goroutines to perform tasks concurrently
-
-const (
-	HeartbeatInterval = 50
-)
-
-const (
-	IsDebugMode = true
-)
-
-type LogEntry struct {
-	Command interface{}
-	Term    int
+type VolatileStateInfo struct {
+	State                State
+	CurrentTerm          int
+	LastElectionReset    time.Time
+	VotedFor             int
+	votesGrantedReceived int
+	votesTotalReceived   int
 }
 
-// TODO: handle persistent state
-
+// Node represents a single Raft node.
 type Node struct {
-	mu       sync.Mutex
-	id       int
-	peersIds []int
-
-	// a rpc server representing this node, which could be used to issue rpc calls
-	server *Server
-
-	// TODO: handle persistent state
-	currentTerm int
-	voteForId   int
-	logs        []LogEntry
-
-	// volatile states
-	state                      State
-	lastElectionTimerResetTime time.Time
+	networkInterface                  *NetworkInterface
+	id                                int
+	volatileStateInfo                 VolatileStateInfo
+	log                               []LogEntry
+	commitIndex                       int
+	lastApplied                       int
+	leaderID                          int
+	peers                             []int
+	appendEntriesOpCh                 chan *AppendEntriesOp
+	requestVoteOpCh                   chan *RequestVoteOp
+	appendEntriesReplyOpCh            chan *AppendEntriesReplyOp
+	requestVoteReplyOpCh              chan *RequestVoteReplyOp
+	isReadyToRun                      <-chan interface{}
+	stopOpCh                          chan *StopOp
+	allNodesAreReadyForIncomingSignal *sync.WaitGroup
+	electionStatusCheckerTicker       *time.Ticker
+	electionTermStarted               int
+	electionTimeout                   time.Duration
 }
 
-func (n *Node) startElectionTimer() {
-	electionTimeout := getElectionTimeout()
-
-	n.mu.Lock()
-	DebuggerLog("Node %v: startElectionTimer holding lock", n.id)
-	termStarted := n.currentTerm
-	n.mu.Unlock()
-
-	DebuggerLog("Node %v: Election timer started with timeout %v at term %v", n.id, electionTimeout, n.currentTerm)
-
-	statusCheckTicker := time.NewTicker(10 * time.Millisecond)
-	defer statusCheckTicker.Stop()
-	for {
-		DebuggerLog("Node %v: begin startElectionTimer for loop", n.id)
-		<-statusCheckTicker.C
-		n.mu.Lock()
-		DebuggerLog("Node %v: startElectionTimer holding lock inside for loop", n.id)
-
-		DebuggerLog("Node %v : Current data: state: %v, term: %v, voteForId: %v", n.id, n.state, n.currentTerm, n.voteForId)
-
-		if n.state != Candidate && n.state != Follower {
-			n.mu.Unlock()
-			DebuggerLog("Node %v: Election timer stopped because it is not in Candidate or Follower state", n.id)
-			return
-		}
-
-		if n.currentTerm != termStarted {
-			n.mu.Unlock()
-			DebuggerLog("Node %v: Election timer stopped because term has changed", n.id)
-			return
-		}
-
-		if timePassedSinceLastReset := time.Since(n.lastElectionTimerResetTime); timePassedSinceLastReset >= electionTimeout {
-			// still holding lock, thus inside startElection, no need to lock again, or it would stuck
-			n.startElection()
-			n.mu.Unlock()
-			DebuggerLog("Node %v: Election timer timed out, start a new election", n.id)
-			return
-		}
-
-		n.mu.Unlock()
-		DebuggerLog("Node %v: end startElectionTimer for loop", n.id)
-	}
+// LogEntry represents a log entry in Raft.
+type LogEntry struct {
+	Term    int
+	Command interface{}
 }
 
-type RequestVoteArgs struct {
-	// candidate’s term
-	Term int
-	// candidate requesting vote
-	CandidateId int
-	// index of candidate’s last log entry
-	LastLogIndex int
-	// term of candidate’s last log entry
-	LastLogTerm int
-}
-
-type RequestVoteReply struct {
-	// currentTerm, for candidate to update itself
-	Term int
-	// true means candidate received vote
-	VoteGranted bool
-}
-
-func (n *Node) startElection() {
-
-	n.state = Candidate
-	n.currentTerm++
-
-	startedTerm := n.currentTerm
-
-	n.lastElectionTimerResetTime = time.Now()
-	n.voteForId = n.id
-
-	DebuggerLog("start election change data: state: %v, term: %v, voteForId: %v", n.state, n.currentTerm, n.voteForId)
-
-	votesReceived := 1
-
-	DebuggerLog("Node %v: New election started, transition to candidate at term %v", n.id, startedTerm)
-
-	for _, peerId := range n.peersIds {
-		go func(peerId int) {
-			args := RequestVoteArgs{
-				Term:        startedTerm,
-				CandidateId: n.id,
-			}
-
-			reply := RequestVoteReply{}
-
-			DebuggerLog("Node %v: Sending RequestVote to Node %v : %+v", n.id, peerId, args)
-
-			if err := n.server.Call(peerId, "Node.RequestVote", args, &reply); err == nil {
-
-				n.mu.Lock()
-				DebuggerLog("Node %v: startElection holding lock first if", n.id)
-				defer n.mu.Unlock()
-
-				DebuggerLog("Node %v: Received RequestVote reply from Node %v: %+v", n.id, peerId, reply)
-
-				if n.state != Candidate {
-					DebuggerLog("Node %v: Node %v is not a candidate anymore", n.id, peerId)
-					return
-				}
-
-				if reply.Term > startedTerm {
-					DebuggerLog("Node %v: Node %v has a higher term, converting to follower", n.id, peerId)
-					n.transitionToFollower(reply.Term)
-					return
-				} else if reply.Term == startedTerm {
-					if reply.VoteGranted {
-						votesReceived++
-						// Don't forget to count itself when it comes to the strict majority of the whole cluster! Peers only count from other peers.
-						if votesReceived > (len(n.peersIds)+1)/2 {
-							DebuggerLog("Node %v: Received majority votes, converting to leader", n.id)
-							n.transitionToLeader()
-							return
-						}
-					}
-				}
-
-			}
-
-		}(peerId)
-	}
-
-	// just in case nobody has won, start a new election
-	go n.startElectionTimer()
-}
-
-func (n *Node) transitionToFollower(term int) {
-
-	DebuggerLog("Node %v: Transitioning to follower at term %v", n.id, term)
-	n.state = Follower
-	n.currentTerm = term
-	n.voteForId = -1
-	n.lastElectionTimerResetTime = time.Now()
-
-	go n.startElectionTimer()
-}
-
-func (n *Node) transitionToLeader() {
-
-	n.state = Leader
-	DebuggerLog("Node %v: Transitioning to leader", n.id)
-
-	go func() {
-		heartbeatTicker := time.NewTicker(HeartbeatInterval * time.Millisecond)
-		defer heartbeatTicker.Stop()
-
-		for {
-			n.sendHeartbeats()
-			<-heartbeatTicker.C
-
-			n.mu.Lock()
-			DebuggerLog("Node %v: transitionToLeader holding lock", n.id)
-			if n.state != Leader {
-				n.mu.Unlock()
-				return
-			}
-			n.mu.Unlock()
-		}
-	}()
-}
-
+// AppendEntriesArgs represents an AppendEntries RPC.
 type AppendEntriesArgs struct {
-	Term     int
-	LeaderId int
-
+	Term         int
+	LeaderID     int
 	PrevLogIndex int
 	PrevLogTerm  int
 	Entries      []LogEntry
@@ -232,148 +70,404 @@ type AppendEntriesReply struct {
 	Success bool
 }
 
-func (n *Node) sendHeartbeats() {
-	n.mu.Lock()
-	DebuggerLog("Node %v: sendHeartbeats holding lock", n.id)
-	if n.state != Leader {
-		n.mu.Unlock()
+// RequestVoteArgs represents a RequestVote RPC.
+type RequestVoteArgs struct {
+	Term         int
+	CandidateID  int
+	LastLogIndex int
+	LastLogTerm  int
+}
+
+type RequestVoteReply struct {
+	Term        int
+	VoteGranted bool
+}
+
+func MakeNewNode(id int, peers []int, server *NetworkInterface, isReadyToRun <-chan interface{}, allNodesAreReadyForIncomingSignal *sync.WaitGroup) *Node {
+	defaultVolatileStateInfo := VolatileStateInfo{
+		State:             Follower,
+		CurrentTerm:       0,
+		LastElectionReset: time.Date(1, 1, 1, 0, 0, 0, 0, time.UTC),
+		VotedFor:          -1,
+	}
+	node := &Node{
+		networkInterface:                  server,
+		id:                                id,
+		volatileStateInfo:                 defaultVolatileStateInfo,
+		log:                               make([]LogEntry, 0),
+		commitIndex:                       0,
+		lastApplied:                       0,
+		leaderID:                          -1,
+		peers:                             peers,
+		appendEntriesOpCh:                 make(chan *AppendEntriesOp),
+		requestVoteOpCh:                   make(chan *RequestVoteOp),
+		appendEntriesReplyOpCh:            make(chan *AppendEntriesReplyOp),
+		requestVoteReplyOpCh:              make(chan *RequestVoteReplyOp),
+		isReadyToRun:                      isReadyToRun,
+		stopOpCh:                          make(chan *StopOp),
+		allNodesAreReadyForIncomingSignal: allNodesAreReadyForIncomingSignal,
+		electionStatusCheckerTicker:       time.NewTicker(10 * time.Millisecond),
+	}
+
+	allNodesAreReadyForIncomingSignal.Add(1)
+
+	go node.run()
+
+	return node
+}
+
+func (m AppendEntriesArgs) isHeartbeat() bool {
+	return 0 == len(m.Entries)
+}
+
+// TODO: recievier end not processing fast enough
+
+func (node *Node) run() {
+	<-node.isReadyToRun
+
+	go func() {
+		DebuggerLog("Node %v: start single thread listener", node.id)
+
+		node.allNodesAreReadyForIncomingSignal.Done()
+
+		node.volatileStateInfo.LastElectionReset = time.Now()
+
+		node.startElectionTimer()
+
+		leaderSendHeartbeatTicker := time.NewTicker(20 * time.Millisecond)
+		defer leaderSendHeartbeatTicker.Stop()
+
+		isRunning := true
+
+		for isRunning {
+			startTime := time.Now()
+
+			select {
+			case <-node.electionStatusCheckerTicker.C:
+				node.handleElectionStatusCheck()
+				node.printElapsedTime("handleElectionStatusCheck", startTime)
+
+			case <-leaderSendHeartbeatTicker.C:
+				node.handleLeaderSendHeartbeatTicker()
+				node.printElapsedTime("handleLeaderSendHeartbeatTicker", startTime)
+
+			case stopOp := <-node.stopOpCh:
+				node.handleStopRunning(stopOp)
+				leaderSendHeartbeatTicker.Stop()
+				node.electionStatusCheckerTicker.Stop()
+				isRunning = false
+				node.printElapsedTime("handleStopRunning", startTime)
+				DebuggerLog("Node %v: stop running", node.id)
+
+			case appendEntriesOp := <-node.appendEntriesOpCh:
+				DebuggerLog("Node %v: handle append entries in main loop", node.id)
+				node.handleAppendEntries(appendEntriesOp)
+				node.printElapsedTime("handleAppendEntries", startTime)
+
+			case requestVoteOp := <-node.requestVoteOpCh:
+				DebuggerLog("Node %v: handle request vote in main loop", node.id)
+				node.handleRequestVote(requestVoteOp)
+				node.printElapsedTime("handleRequestVote", startTime)
+
+			case appendEntriesReplyOp := <-node.appendEntriesReplyOpCh:
+				DebuggerLog("Node %v: handle append entries reply in main loop", node.id)
+				node.handleAppendEntriesReply(appendEntriesReplyOp)
+				node.printElapsedTime("handleAppendEntriesReply", startTime)
+
+			case requestVoteReplyOp := <-node.requestVoteReplyOpCh:
+				DebuggerLog("Node %v: handle request vote reply in main loop", node.id)
+				node.handleRequestVoteReply(requestVoteReplyOp)
+				node.printElapsedTime("handleRequestVoteReply", startTime)
+			}
+		}
+
+		DebuggerLog("Node %v: end single thread listener", node.id)
+	}()
+
+}
+
+func (node *Node) printElapsedTime(operation string, startTime time.Time) {
+	elapsed := time.Since(startTime)
+	DebuggerLog("Node %v: %s took %s", node.id, operation, elapsed)
+
+	// Append the result to the timestamp.csv file
+	// node.writeToTimestampFile(operation, elapsed)
+}
+
+func (node *Node) writeToTimestampFile(operation string, elapsed time.Duration) {
+
+	fileName := "timestamp.csv"
+	file, err := os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+	if err != nil {
+		DebuggerLog("Error opening file %s: %v", fileName, err)
 		return
 	}
-	savedCurrentTerm := n.currentTerm
-	n.mu.Unlock()
-
-	for _, peerId := range n.peersIds {
-		args := AppendEntriesArgs{
-			Term:     savedCurrentTerm,
-			LeaderId: n.id,
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+			panic(fmt.Sprintf("Error closing file %s: %v", fileName, err))
 		}
-		go func(peerId int) {
-			DebuggerLog("Sending AppendEntries to Node %v: ni=%d, args=%+v", peerId, 0, args)
-			reply := AppendEntriesReply{}
-			if err := n.server.Call(peerId, "Node.AppendEntries", args, &reply); err == nil {
-				n.mu.Lock()
-				DebuggerLog("Node %v: sendHeartbeats holding lock inside if", n.id)
-				defer n.mu.Unlock()
-				if reply.Term > savedCurrentTerm {
-					DebuggerLog("term out of date in heartbeat reply")
-					n.transitionToFollower(reply.Term)
-					return
-				}
-			}
-		}(peerId)
+	}(file)
+
+	// Use a mutex to ensure safe concurrent writes to the file
+	var mutex sync.Mutex
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+
+	// Convert elapsed time to microseconds
+	elapsedMicroseconds := elapsed.Microseconds()
+
+	record := []string{
+		strconv.Itoa(node.id),
+		operation,
+		strconv.FormatInt(elapsedMicroseconds, 10),
+	}
+
+	if err := writer.Write(record); err != nil {
+		DebuggerLog("Error writing to file %s: %v", fileName, err)
 	}
 }
 
-func (n *Node) RequestVote(args RequestVoteArgs, reply *RequestVoteReply) error {
-	n.mu.Lock()
-	DebuggerLog("Node %v: RequestVote holding lock", n.id)
-	defer n.mu.Unlock()
-
-	if n.state == Dead {
-		DebuggerLog("Node %v: RequestVote received after death", n.id)
-		return nil
+func (node *Node) handleAppendEntries(op *AppendEntriesOp) {
+	if node.volatileStateInfo.State == Dead {
+		DebuggerLog("Node %v: state is dead, return", node.id)
+		return
 	}
 
-	DebuggerLog("Node %v: RequestVote received: %+v", n.id, args)
-
-	if args.Term > n.currentTerm {
-		DebuggerLog("Node %v: RequestVote received with higher term %v", n.id, args.Term)
-		n.transitionToFollower(args.Term)
+	if op.args.Term > node.volatileStateInfo.CurrentTerm {
+		DebuggerLog("Node %v: term out of date in AppendEntries", node.id)
+		node.transitionToFollower(op.args.Term)
 	}
 
-	if args.Term == n.currentTerm && (n.voteForId == -1 || n.voteForId == args.CandidateId) {
-		n.voteForId = args.CandidateId
-		reply.VoteGranted = true
-		n.lastElectionTimerResetTime = time.Now()
-	} else {
-		reply.VoteGranted = false
-	}
-
-	reply.Term = n.currentTerm
-	DebuggerLog("RequestVote reply: %+v", *reply)
-	return nil
-}
-
-func (n *Node) AppendEntries(args AppendEntriesArgs, reply *AppendEntriesReply) error {
-	n.mu.Lock()
-	DebuggerLog("Node %v: AppendEntries holding lock", n.id)
-	defer n.mu.Unlock()
-
-	if n.state == Dead {
-		DebuggerLog("Node %v: AppendEntries received after death", n.id)
-		return nil
-	}
-
-	DebuggerLog("Node %v: AppendEntries received: %v", n.id, args)
-
-	if args.Term > n.currentTerm {
-		// there is a new leader / incoming entries have new content
-		DebuggerLog("Node %v: AppendEntries received with higher term %v, transition to follower state", n.id, args.Term)
-		n.transitionToFollower(args.Term)
-	}
+	reply := &AppendEntriesReply{}
 
 	reply.Success = false
-
-	if args.Term == n.currentTerm {
-		if n.state != Follower {
-			n.transitionToFollower(args.Term)
+	if op.args.Term == node.volatileStateInfo.CurrentTerm {
+		if node.volatileStateInfo.State != Follower {
+			node.transitionToFollower(op.args.Term)
 		}
-		n.lastElectionTimerResetTime = time.Now()
+
+		node.volatileStateInfo.LastElectionReset = time.Now()
 		reply.Success = true
 	}
 
-	reply.Term = n.currentTerm
-	DebuggerLog("AppendEntries reply: %+v", *reply)
+	reply.Term = node.volatileStateInfo.CurrentTerm
+
+	err := node.networkInterface.SendAppendEntriesReply(node.id, op.args.LeaderID, op.args, *reply)
+	if err != nil {
+		panic(fmt.Sprintf("Error in SendAppendEntriesReply RPC: %v", err))
+	}
+}
+
+func (node *Node) handleRequestVote(op *RequestVoteOp) {
+	if node.volatileStateInfo.State == Dead {
+		DebuggerLog("Node %v: state is dead, return", node.id)
+		return
+	}
+
+	if op.args.Term > node.volatileStateInfo.CurrentTerm {
+		DebuggerLog("Node %v: term out of date in RequestVote", node.id)
+		node.transitionToFollower(op.args.Term)
+	}
+
+	var reply RequestVoteReply
+
+	if node.volatileStateInfo.CurrentTerm == op.args.Term &&
+		(node.volatileStateInfo.VotedFor == -1 || node.volatileStateInfo.VotedFor == op.args.CandidateID) {
+		reply.VoteGranted = true
+
+		node.volatileStateInfo.VotedFor = op.args.CandidateID
+		node.volatileStateInfo.LastElectionReset = time.Now()
+
+	} else {
+		reply.VoteGranted = false
+	}
+	reply.Term = node.volatileStateInfo.CurrentTerm
+	err := node.networkInterface.SendRequestVoteReply(node.id, op.args.CandidateID, reply)
+	if err != nil {
+		panic(fmt.Sprintf("Error in SendRequestVoteReply RPC: %v", err))
+	}
+}
+
+func (node *Node) startElection() {
+	node.volatileStateInfo.State = Candidate
+	node.volatileStateInfo.CurrentTerm += 1
+	node.volatileStateInfo.LastElectionReset = time.Now()
+	node.volatileStateInfo.VotedFor = node.id
+
+	DebuggerLog("Node %v: Start election for term %v", node.id, node.volatileStateInfo.CurrentTerm)
+
+	node.volatileStateInfo.votesGrantedReceived = 1
+	node.volatileStateInfo.votesTotalReceived = 1
+
+	args := RequestVoteArgs{
+		Term:        node.volatileStateInfo.CurrentTerm,
+		CandidateID: node.id,
+	}
+
+	for _, peerId := range node.peers {
+		DebuggerLog("Node %v: Send RequestVote to %v", node.id, peerId)
+
+		go node.networkInterface.RequestVote(peerId, args)
+	}
+}
+
+func (node *Node) HandleStopRPC() {
+	stopOp := &StopOp{
+		reply: make(chan bool),
+	}
+	node.stopOpCh <- stopOp
+	<-stopOp.reply
+}
+
+func (node *Node) HandleRequestVoteRPC(args RequestVoteArgs) error {
+	DebuggerLog("Node %v: HandleRequestVoteRPC Receive RequestVote from %v: %+v ", node.id, args.CandidateID, args)
+	requestVoteOp := &RequestVoteOp{
+		args: args,
+	}
+	node.requestVoteOpCh <- requestVoteOp
+	DebuggerLog("Node %v: HandleRequestVoteRPC end", node.id)
 	return nil
-
 }
 
-func (n *Node) Kill() {
-	DebuggerLog("Inside Node %v: Killing", n.id)
-	n.mu.Lock()
-	DebuggerLog("Kill holding lock")
-	defer n.mu.Unlock()
-	DebuggerLog("After begin Node %v: Killing, state is %v", n.id, n.state)
-	n.state = Dead
-	DebuggerLog("Node %v: Killed", n.id)
+func (node *Node) HandleAppendEntriesRPC(args AppendEntriesArgs) error {
+	DebuggerLog("Node %v: HandleAppendEntriesRPC Receive AppendEntries from %v: %+v", node.id, args.LeaderID, args)
+	appendEntriesOp := &AppendEntriesOp{
+		args: args,
+	}
+	node.appendEntriesOpCh <- appendEntriesOp
+	DebuggerLog("Node %v: HandleAppendEntriesRPC end", node.id)
+	return nil
 }
 
-func (n *Node) GetIDTermIsLeader() (int, int, bool) {
-	n.mu.Lock()
-	DebuggerLog("GetIDTermIsLeader holding lock")
-	defer n.mu.Unlock()
-	return n.id, n.currentTerm, n.state == Leader
+func (node *Node) handleStopRunning(op *StopOp) {
+	DebuggerLog("Node %v: run stopOpCh", node.id)
+	node.volatileStateInfo.State = Dead
+	op.reply <- true
 }
 
-func DebuggerLog(format string, a ...interface{}) {
-	if IsDebugMode {
-		log.Printf(format, a...)
+func (node *Node) transitionToFollower(term int) {
+	DebuggerLog("Node %v: term out of date in RequestVoteReply", node.id)
+	node.volatileStateInfo.State = Follower
+	node.volatileStateInfo.CurrentTerm = term
+	node.volatileStateInfo.VotedFor = -1
+	node.volatileStateInfo.LastElectionReset = time.Now()
+
+	node.startElectionTimer()
+}
+
+func (node *Node) transitionToLeader() {
+	node.volatileStateInfo.State = Leader
+	DebuggerLog("Node %v: transition to leader", node.id)
+}
+
+func (node *Node) Report() (id int, term int, isLeader bool) {
+	// Wait for all nodes in the cluster to be ready for incoming signals
+	node.allNodesAreReadyForIncomingSignal.Wait()
+	DebuggerLog("Node %v: begin to report", node.id)
+	return node.id, node.volatileStateInfo.CurrentTerm, node.volatileStateInfo.State == Leader
+}
+
+func (node *Node) handleLeaderSendHeartbeatTicker() {
+	if node.volatileStateInfo.State != Leader {
+		return
+	}
+
+	args := AppendEntriesArgs{
+		Term:     node.volatileStateInfo.CurrentTerm,
+		LeaderID: node.id,
+	}
+
+	for _, peerId := range node.peers {
+		go node.networkInterface.AppendEntries(peerId, args)
 	}
 }
 
-// To prevent split votes in the first place, election timeouts are chosen randomly from a fixed interval (e.g., 150–300ms).
-func getElectionTimeout() time.Duration {
-	return time.Duration(150+rand.Int()%151) * time.Millisecond
-}
-
-func MakeNewNode(id int, peersIds []int, server *Server, isReadyToStart <-chan interface{}) *Node {
-	node := &Node{
-		id:        id,
-		peersIds:  peersIds,
-		server:    server,
-		state:     Follower,
-		voteForId: -1,
+func (node *Node) handleElectionStatusCheck() {
+	if node.volatileStateInfo.State != Candidate && node.volatileStateInfo.State != Follower {
+		DebuggerLog("Node %v: Election timer stopped because it is not in Candidate or Follower state", node.id)
+		return
 	}
 
-	go func() {
-		// This goroutine blocks until a value is received on isReadyToStart channel
-		// It won't proceed until the channel is closed
-		<-isReadyToStart
-		node.mu.Lock()
-		node.lastElectionTimerResetTime = time.Now()
-		node.mu.Unlock()
+	if node.volatileStateInfo.CurrentTerm != node.electionTermStarted {
+		DebuggerLog("Node %v: Election timer stopped because term has changed", node.id)
+		return
+	}
+
+	if timePassedSinceLastReset := time.Since(node.volatileStateInfo.LastElectionReset); timePassedSinceLastReset >= node.electionTimeout {
+		DebuggerLog("Node %v: Election timeout, start election", node.id)
+		node.startElection()
+		return
+	}
+}
+
+func (node *Node) startElectionTimer() {
+	node.electionTimeout = getElectionTimeout(150, 300)
+	node.electionTermStarted = node.volatileStateInfo.CurrentTerm
+}
+
+func (node *Node) handleAppendEntriesReply(op *AppendEntriesReplyOp) {
+	reply := op.reply
+
+	if op.args.isHeartbeat() {
+		if reply.Term > node.volatileStateInfo.CurrentTerm {
+			node.transitionToFollower(reply.Term)
+			return
+		}
+	}
+
+	// TODO: handle non heartbeat append entries reply
+}
+
+func (node *Node) handleRequestVoteReply(op *RequestVoteReplyOp) {
+	reply := op.reply
+
+	if node.volatileStateInfo.State != Candidate {
+		DebuggerLog("Node %v: state changed to %v, stop sending RequestVote", node.id, node.volatileStateInfo.State)
+		return
+	}
+
+	if reply.Term > node.volatileStateInfo.CurrentTerm {
+		DebuggerLog("Node %v: term out of date in RequestVoteReply", node.id)
+		node.transitionToFollower(reply.Term)
+		return
+	} else if reply.Term == node.volatileStateInfo.CurrentTerm {
+		node.volatileStateInfo.votesTotalReceived += 1
+		if reply.VoteGranted {
+			node.volatileStateInfo.votesGrantedReceived += 1
+			if node.volatileStateInfo.votesGrantedReceived*2 > len(node.peers)+1 {
+				DebuggerLog("Node %v: wins election with %d votes", node.id, node.volatileStateInfo.votesGrantedReceived)
+				node.transitionToLeader()
+				return
+			}
+		}
+	}
+
+	if node.volatileStateInfo.votesTotalReceived*2 > len(node.peers)+1 {
+		// no leader selected, start election again
+		DebuggerLog("Node %v: no leader selected, start election again", node.id)
 		node.startElectionTimer()
-	}()
+	}
+}
 
-	return node
+func (node *Node) HandleAppendEntriesReplyRPC(replierId int, args AppendEntriesArgs, reply AppendEntriesReply) {
+	DebuggerLog("Node %v: HandleAppendEntriesReplyRPC Receive AppendEntriesReply from %v: %+v", node.id, replierId, reply)
+	appendEntriesOp := &AppendEntriesReplyOp{
+		args:  args,
+		reply: reply,
+	}
+	node.appendEntriesReplyOpCh <- appendEntriesOp
+	DebuggerLog("Node %v: HandleAppendEntriesReplyRPC end", node.id)
+}
+
+func (node *Node) HandleRequestVoteReplyRPC(replierId int, reply RequestVoteReply) {
+	DebuggerLog("Node %v: HandleRequestVoteReplyRPC Receive RequestVoteReply from %v: %+v", node.id, replierId, reply)
+	requestVoteReplyOp := &RequestVoteReplyOp{
+		reply: reply,
+	}
+	node.requestVoteReplyOpCh <- requestVoteReplyOp
+	DebuggerLog("Node %v: HandleRequestVoteReplyRPC end", node.id)
 }

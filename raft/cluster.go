@@ -1,136 +1,161 @@
 package raft
 
 import (
+	"sync"
 	"testing"
 	"time"
 )
 
 type Cluster struct {
-	cluster     []*Server
-	isConnected []bool
-	size        int
+	// cluster is a list of all the raft servers participating in a cluster.
+	cluster []*NetworkInterface
+
+	// connected has a bool per networkInterface in cluster, specifying whether this networkInterface
+	// is currently connected to peers (if false, it's partitioned and no messages
+	// will pass to or from it).
+	connected []bool
+
+	allNodesAreReadyForIncomingSignal sync.WaitGroup
+
+	n int
+	t *testing.T
 }
 
-func MakeAndStartNewCluster(t *testing.T, size int) *Cluster {
-	servers := make([]*Server, size)
-	isConnected := make([]bool, size)
-	isReadyToStart := make(chan interface{})
+// MakeNewCluster creates a new test Cluster, initialized with n servers connected
+// to each other.
+func MakeNewCluster(t *testing.T, n int) *Cluster {
+	ns := make([]*NetworkInterface, n)
+	connected := make([]bool, n)
+	ready := make(chan interface{})
 
-	// create servers and start them
-	for i := 0; i < size; i++ {
-		peersIds := make([]int, 0)
-		for peerId := 0; peerId < size; peerId++ {
-			// for peers, exclude self
-			if peerId != i {
-				peersIds = append(peersIds, peerId)
+	// Create all Servers in this cluster, assign ids and peer ids.
+	for i := 0; i < n; i++ {
+		peerIds := make([]int, 0)
+		for p := 0; p < n; p++ {
+			if p != i {
+				peerIds = append(peerIds, p)
 			}
 		}
-		servers[i] = MakeNewServer(i, peersIds, isReadyToStart)
-		servers[i].Start()
+
+		ns[i] = MakeNewNetworkInterface(i, peerIds, ready, &sync.WaitGroup{})
+		ns[i].Serve()
 	}
 
-	// connect servers to each other
-	for i := 0; i < size; i++ {
-		for j := 0; j < size; j++ {
+	// Connect all peers to each other.
+	for i := 0; i < n; i++ {
+		for j := 0; j < n; j++ {
 			if i != j {
-				err := servers[i].ConnectTo(j, servers[j].listener.Addr())
+				err := ns[i].ConnectToPeer(j, ns[j].server)
 				if err != nil {
 					panic(err)
 				}
 			}
 		}
-		isConnected[i] = true
+		connected[i] = true
 	}
-
-	// Signal readiness by closing the isReadyToStart channel
-	// So each node can start its main loop after they are all connected
-	// Else would cause server not found error during intialization
-	close(isReadyToStart)
+	close(ready)
 
 	return &Cluster{
-		cluster:     servers,
-		isConnected: isConnected,
-		size:        size,
+		cluster:                           ns,
+		connected:                         connected,
+		allNodesAreReadyForIncomingSignal: sync.WaitGroup{},
+		n:                                 n,
+		t:                                 t,
 	}
 }
 
-func (c *Cluster) KillAll() {
-	DebuggerLog("Begin KillAll")
-
-	for i := 0; i < c.size; i++ {
-		c.cluster[i].DisconnectFromAll()
-		c.isConnected[i] = false
+// Shutdown shuts down all the servers in the harness and waits for them to
+// stop running.
+func (c *Cluster) Shutdown() {
+	for i := 0; i < c.n; i++ {
+		c.cluster[i].DisconnectAll()
+		c.connected[i] = false
 	}
-
-	DebuggerLog("KillAll : Disconnected all servers")
-
-	for i := 0; i < c.size; i++ {
-		c.cluster[i].Kill()
+	for i := 0; i < c.n; i++ {
+		go c.cluster[i].Shutdown()
 	}
-
-	DebuggerLog("End KillAll")
 }
 
-func (c *Cluster) DisconnectServerFromPeers(serverId int) {
-	c.cluster[serverId].DisconnectFromAll()
-
-	for i := 0; i < c.size; i++ {
-		if i != serverId {
-			err := c.cluster[i].DisconnectFrom(serverId)
-			if err != nil {
-				return
-			}
-		}
-	}
-
-	c.isConnected[serverId] = false
-}
-
-func (c *Cluster) ConnectServerToPeers(serverId int) {
-	for i := 0; i < c.size; i++ {
-		if i != serverId {
-			err := c.cluster[serverId].ConnectTo(i, c.cluster[i].listener.Addr())
+// DisconnectPeer disconnects a networkInterface from all other servers in the cluster.
+func (c *Cluster) DisconnectPeer(id int) {
+	DebuggerLog("Disconnect Node %d", id)
+	c.cluster[id].DisconnectAll()
+	for j := 0; j < c.n; j++ {
+		if j != id {
+			err := c.cluster[j].DisconnectPeer(id)
 			if err != nil {
 				panic(err)
 			}
 		}
 	}
-
-	c.isConnected[serverId] = true
+	c.connected[id] = false
 }
 
-func (c *Cluster) GetSingleLeaderInfo() (int, int) {
+// ReconnectPeer connects a networkInterface to all other servers in the cluster.
+func (c *Cluster) ReconnectPeer(id int) {
+	DebuggerLog("Reconnect Node %d", id)
+	for j := 0; j < c.n; j++ {
+		if j != id {
+			if err := c.cluster[id].ConnectToPeer(j, c.cluster[j].server); err != nil {
+				DebuggerLog("ReconnectPeer Node %d: %v", id, err)
+			}
+			if err := c.cluster[j].ConnectToPeer(id, c.cluster[id].server); err != nil {
+				DebuggerLog("ReconnectPeer Node %d: %v", j, err)
+			}
+		}
+	}
+	c.connected[id] = true
+}
 
-	for attempts := 0; attempts < 5; attempts++ {
-
+// CheckSingleLeader checks that only a single networkInterface thinks it's the leader.
+// Returns the leader's id and term. It retries several times if no leader is
+// identified yet.
+func (c *Cluster) CheckSingleLeader() (int, int) {
+	for r := 0; r < c.n*10; r++ {
 		leaderId := -1
 		leaderTerm := -1
-
-		for i := 0; i < c.size; i++ {
-			if c.isConnected[i] {
-				_, term, isLeader := c.cluster[i].node.GetIDTermIsLeader()
+		for i := 0; i < c.n; i++ {
+			if c.connected[i] {
+				_, term, isLeader := c.cluster[i].server.node.Report()
+				DebuggerLog("CheckSingleLeader: networkInterface %d term %d isLeader %v", i, term, isLeader)
 				if isLeader {
 					if leaderId < 0 {
 						leaderId = i
 						leaderTerm = term
 					} else {
-						panic("Both Node " + string(rune(leaderId)) + " and Node " + string(rune(i)) + " think they're leaders")
+						if leaderTerm == term {
+							c.t.Fatalf("both %d and %d think they're leaders during term %d", leaderId, i, term)
+						} else {
+							// update the leaderId to the one with the higher term
+							if leaderTerm < term {
+								leaderId = i
+								leaderTerm = term
+							}
+						}
 					}
 				}
 			}
 		}
-
 		if leaderId >= 0 {
+			DebuggerLog("CheckSingleLeader: return with leaderId %d leaderTerm %d", leaderId, leaderTerm)
 			return leaderId, leaderTerm
 		}
-
-		c.Sleep(150)
+		time.Sleep(200 * time.Millisecond)
 	}
 
-	panic("No leader found")
+	DebuggerLog("leader not found")
 	return -1, -1
 }
 
-func (c *Cluster) Sleep(i int) {
-	time.Sleep(time.Duration(i) * time.Millisecond)
+// CheckNoLeader checks that no connected networkInterface considers itself the leader.
+func (c *Cluster) CheckNoLeader() {
+	for i := 0; i < c.n; i++ {
+		if c.connected[i] {
+			_, _, isLeader := c.cluster[i].server.node.Report()
+			DebuggerLog("CheckNoLeader: networkInterface %d isLeader %v", i, isLeader)
+			if isLeader {
+				DebuggerLog("networkInterface %d leader; want none", i)
+			}
+		}
+	}
 }

@@ -1,0 +1,691 @@
+goroutine 65 [running]:
+runtime/pprof.writeGoroutineStacks({0x1010dbdc0, 0x140001a4000})
+	/opt/homebrew/opt/go/libexec/src/runtime/pprof/pprof.go:703 +0x6c
+runtime/pprof.writeGoroutine({0x1010dbdc0?, 0x140001a4000?}, 0x1400017e200?)
+	/opt/homebrew/opt/go/libexec/src/runtime/pprof/pprof.go:692 +0x2c
+runtime/pprof.(*Profile).WriteTo(0x1010a6880?, {0x1010dbdc0?, 0x140001a4000?}, 0xc?)
+	/opt/homebrew/opt/go/libexec/src/runtime/pprof/pprof.go:329 +0x154
+net/http/pprof.handler.ServeHTTP({0x14000126011, 0x9}, {0x1010ded40, 0x140001a4000}, 0x140001f0020?)
+	/opt/homebrew/opt/go/libexec/src/net/http/pprof/pprof.go:259 +0x3d0
+net/http/pprof.Index({0x1010ded40?, 0x140001a4000}, 0x1400017e200?)
+	/opt/homebrew/opt/go/libexec/src/net/http/pprof/pprof.go:376 +0xc8
+net/http.HandlerFunc.ServeHTTP(0x14000155ad8?, {0x1010ded40?, 0x140001a4000?}, 0x10?)
+	/opt/homebrew/opt/go/libexec/src/net/http/server.go:2122 +0x38
+net/http.(*ServeMux).ServeHTTP(0x1400012601b?, {0x1010ded40, 0x140001a4000}, 0x1400017e200)
+	/opt/homebrew/opt/go/libexec/src/net/http/server.go:2500 +0x140
+net/http.serverHandler.ServeHTTP({0x14000181080?}, {0x1010ded40, 0x140001a4000}, 0x1400017e200)
+	/opt/homebrew/opt/go/libexec/src/net/http/server.go:2936 +0x2d8
+net/http.(*conn).serve(0x1400031e000, {0x1010df088, 0x1400030a180})
+	/opt/homebrew/opt/go/libexec/src/net/http/server.go:1995 +0x560
+created by net/http.(*Server).Serve
+	/opt/homebrew/opt/go/libexec/src/net/http/server.go:3089 +0x520
+
+goroutine 1 [chan receive]:
+testing.(*T).Run(0x1400011d040, {0x100f7900c?, 0x213b6cc7273ac?}, 0x1010d9310)
+	/opt/homebrew/opt/go/libexec/src/testing/testing.go:1630 +0x37c
+testing.runTests.func1(0x1400011d040?)
+	/opt/homebrew/opt/go/libexec/src/testing/testing.go:2036 +0x48
+testing.tRunner(0x1400011d040, 0x1400017bc68)
+	/opt/homebrew/opt/go/libexec/src/testing/testing.go:1576 +0x10c
+testing.runTests(0x140001a0000?, {0x10134a360, 0x1, 0x1}, {0x1288dab28?, 0x100c1a790?, 0x10135bbe0?})
+	/opt/homebrew/opt/go/libexec/src/testing/testing.go:2034 +0x40c
+testing.(*M).Run(0x140001a0000)
+	/opt/homebrew/opt/go/libexec/src/testing/testing.go:1906 +0x58c
+main.main()
+	_testmain.go:47 +0x1d0
+
+goroutine 34 [chan send]:
+raftkv/raft.(*Node).readCurrentVolatileStateInfo(...)
+	/Users/lydiayuan/Capstone-Project/raft/node.go:411
+raftkv/raft.(*Node).Report(...)
+	/Users/lydiayuan/Capstone-Project/raft/node.go:390
+raftkv/raft.(*Cluster).CheckSingleLeader(0x1400028a1c0)
+	/Users/lydiayuan/Capstone-Project/raft/cluster.go:110 +0x100
+raftkv/raft.TestElectionBasic(0x0?)
+	/Users/lydiayuan/Capstone-Project/raft/netwrok_test.go:21 +0x5c
+testing.tRunner(0x1400011d1e0, 0x1010d9310)
+	/opt/homebrew/opt/go/libexec/src/testing/testing.go:1576 +0x10c
+created by testing.(*T).Run
+	/opt/homebrew/opt/go/libexec/src/testing/testing.go:1629 +0x368
+
+goroutine 35 [IO wait]:
+internal/poll.runtime_pollWait(0x1288ede18, 0x72)
+	/opt/homebrew/opt/go/libexec/src/runtime/netpoll.go:306 +0xa0
+internal/poll.(*pollDesc).wait(0x14000314000?, 0x100c00088?, 0x0)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:84 +0x28
+internal/poll.(*pollDesc).waitRead(...)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Accept(0x14000314000)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_unix.go:614 +0x250
+net.(*netFD).accept(0x14000314000)
+	/opt/homebrew/opt/go/libexec/src/net/fd_unix.go:172 +0x28
+net.(*TCPListener).accept(0x1400030e018)
+	/opt/homebrew/opt/go/libexec/src/net/tcpsock_posix.go:148 +0x28
+net.(*TCPListener).Accept(0x1400030e018)
+	/opt/homebrew/opt/go/libexec/src/net/tcpsock.go:297 +0x2c
+net/http.(*Server).Serve(0x14000072000, {0x1010deb60, 0x1400030e018})
+	/opt/homebrew/opt/go/libexec/src/net/http/server.go:3059 +0x304
+net/http.(*Server).ListenAndServe(0x14000072000)
+	/opt/homebrew/opt/go/libexec/src/net/http/server.go:2988 +0x84
+net/http.ListenAndServe(...)
+	/opt/homebrew/opt/go/libexec/src/net/http/server.go:3242
+raftkv/raft.startPProfServer.func1()
+	/Users/lydiayuan/Capstone-Project/raft/netwrok_test.go:11 +0x40
+created by raftkv/raft.startPProfServer
+	/Users/lydiayuan/Capstone-Project/raft/netwrok_test.go:10 +0x24
+
+goroutine 36 [chan send]:
+raftkv/raft.(*Node).writeCurrentVolatileStateInfo(...)
+	/Users/lydiayuan/Capstone-Project/raft/node.go:416
+raftkv/raft.(*Node).run(0x140001a41c0)
+	/Users/lydiayuan/Capstone-Project/raft/node.go:117 +0x78
+created by raftkv/raft.MakeNewNode
+	/Users/lydiayuan/Capstone-Project/raft/node.go:105 +0x338
+
+goroutine 86 [IO wait]:
+internal/poll.runtime_pollWait(0x1289ecf08, 0x72)
+	/opt/homebrew/opt/go/libexec/src/runtime/netpoll.go:306 +0xa0
+internal/poll.(*pollDesc).wait(0x1400017c000?, 0x1400032c000?, 0x0)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:84 +0x28
+internal/poll.(*pollDesc).waitRead(...)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0x1400017c000, {0x1400032c000, 0x1000, 0x1000})
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_unix.go:167 +0x200
+net.(*netFD).Read(0x1400017c000, {0x1400032c000?, 0x140000795c8?, 0x100efd040?})
+	/opt/homebrew/opt/go/libexec/src/net/fd_posix.go:55 +0x28
+net.(*conn).Read(0x140001180d0, {0x1400032c000?, 0x14000079608?, 0x140001801e8?})
+	/opt/homebrew/opt/go/libexec/src/net/net.go:183 +0x34
+net/http.(*connReader).Read(0x140001801e0, {0x1400032c000, 0x1000, 0x1000})
+	/opt/homebrew/opt/go/libexec/src/net/http/server.go:782 +0x234
+bufio.(*Reader).fill(0x1400032a000)
+	/opt/homebrew/opt/go/libexec/src/bufio/bufio.go:106 +0xfc
+bufio.(*Reader).ReadSlice(0x1400032a000, 0x88?)
+	/opt/homebrew/opt/go/libexec/src/bufio/bufio.go:372 +0x30
+bufio.(*Reader).ReadLine(0x1400032a000)
+	/opt/homebrew/opt/go/libexec/src/bufio/bufio.go:401 +0x24
+net/textproto.(*Reader).readLineSlice(0x1400030a300)
+	/opt/homebrew/opt/go/libexec/src/net/textproto/reader.go:56 +0x7c
+net/textproto.(*Reader).ReadLine(...)
+	/opt/homebrew/opt/go/libexec/src/net/textproto/reader.go:39
+net/http.readRequest(0x140000799f8?)
+	/opt/homebrew/opt/go/libexec/src/net/http/request.go:1042 +0x78
+net/http.(*conn).readRequest(0x14000198090, {0x1010defe0, 0x140001300a0})
+	/opt/homebrew/opt/go/libexec/src/net/http/server.go:990 +0x1e4
+net/http.(*conn).serve(0x14000198090, {0x1010df088, 0x1400030a180})
+	/opt/homebrew/opt/go/libexec/src/net/http/server.go:1920 +0x2e8
+created by net/http.(*Server).Serve
+	/opt/homebrew/opt/go/libexec/src/net/http/server.go:3089 +0x520
+
+goroutine 37 [IO wait]:
+internal/poll.runtime_pollWait(0x1288eec28, 0x72)
+	/opt/homebrew/opt/go/libexec/src/runtime/netpoll.go:306 +0xa0
+internal/poll.(*pollDesc).wait(0x1400017cf80?, 0x0?, 0x0)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:84 +0x28
+internal/poll.(*pollDesc).waitRead(...)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Accept(0x1400017cf80)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_unix.go:614 +0x250
+net.(*netFD).accept(0x1400017cf80)
+	/opt/homebrew/opt/go/libexec/src/net/fd_unix.go:172 +0x28
+net.(*TCPListener).accept(0x1400012a768)
+	/opt/homebrew/opt/go/libexec/src/net/tcpsock_posix.go:148 +0x28
+net.(*TCPListener).Accept(0x1400012a768)
+	/opt/homebrew/opt/go/libexec/src/net/tcpsock.go:297 +0x2c
+raftkv/raft.(*Server).Serve.func1()
+	/Users/lydiayuan/Capstone-Project/raft/server.go:64 +0x78
+created by raftkv/raft.(*Server).Serve
+	/Users/lydiayuan/Capstone-Project/raft/server.go:60 +0x30c
+
+goroutine 38 [chan send]:
+raftkv/raft.(*Node).writeCurrentVolatileStateInfo(...)
+	/Users/lydiayuan/Capstone-Project/raft/node.go:416
+raftkv/raft.(*Node).run(0x140001a4460)
+	/Users/lydiayuan/Capstone-Project/raft/node.go:117 +0x78
+created by raftkv/raft.MakeNewNode
+	/Users/lydiayuan/Capstone-Project/raft/node.go:105 +0x338
+
+goroutine 39 [IO wait]:
+internal/poll.runtime_pollWait(0x1288eeb38, 0x72)
+	/opt/homebrew/opt/go/libexec/src/runtime/netpoll.go:306 +0xa0
+internal/poll.(*pollDesc).wait(0x1400017d180?, 0x0?, 0x0)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:84 +0x28
+internal/poll.(*pollDesc).waitRead(...)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Accept(0x1400017d180)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_unix.go:614 +0x250
+net.(*netFD).accept(0x1400017d180)
+	/opt/homebrew/opt/go/libexec/src/net/fd_unix.go:172 +0x28
+net.(*TCPListener).accept(0x1400012a780)
+	/opt/homebrew/opt/go/libexec/src/net/tcpsock_posix.go:148 +0x28
+net.(*TCPListener).Accept(0x1400012a780)
+	/opt/homebrew/opt/go/libexec/src/net/tcpsock.go:297 +0x2c
+raftkv/raft.(*Server).Serve.func1()
+	/Users/lydiayuan/Capstone-Project/raft/server.go:64 +0x78
+created by raftkv/raft.(*Server).Serve
+	/Users/lydiayuan/Capstone-Project/raft/server.go:60 +0x30c
+
+goroutine 40 [chan send]:
+raftkv/raft.(*Node).writeCurrentVolatileStateInfo(...)
+	/Users/lydiayuan/Capstone-Project/raft/node.go:416
+raftkv/raft.(*Node).run(0x140001a4540)
+	/Users/lydiayuan/Capstone-Project/raft/node.go:117 +0x78
+created by raftkv/raft.MakeNewNode
+	/Users/lydiayuan/Capstone-Project/raft/node.go:105 +0x338
+
+goroutine 41 [IO wait]:
+internal/poll.runtime_pollWait(0x1288eea48, 0x72)
+	/opt/homebrew/opt/go/libexec/src/runtime/netpoll.go:306 +0xa0
+internal/poll.(*pollDesc).wait(0x1400017d380?, 0x0?, 0x0)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:84 +0x28
+internal/poll.(*pollDesc).waitRead(...)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Accept(0x1400017d380)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_unix.go:614 +0x250
+net.(*netFD).accept(0x1400017d380)
+	/opt/homebrew/opt/go/libexec/src/net/fd_unix.go:172 +0x28
+net.(*TCPListener).accept(0x1400012a798)
+	/opt/homebrew/opt/go/libexec/src/net/tcpsock_posix.go:148 +0x28
+net.(*TCPListener).Accept(0x1400012a798)
+	/opt/homebrew/opt/go/libexec/src/net/tcpsock.go:297 +0x2c
+raftkv/raft.(*Server).Serve.func1()
+	/Users/lydiayuan/Capstone-Project/raft/server.go:64 +0x78
+created by raftkv/raft.(*Server).Serve
+	/Users/lydiayuan/Capstone-Project/raft/server.go:60 +0x30c
+
+goroutine 6 [IO wait]:
+internal/poll.runtime_pollWait(0x1288ee958, 0x72)
+	/opt/homebrew/opt/go/libexec/src/runtime/netpoll.go:306 +0xa0
+internal/poll.(*pollDesc).wait(0x1400017d400?, 0x1400020d000?, 0x0)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:84 +0x28
+internal/poll.(*pollDesc).waitRead(...)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0x1400017d400, {0x1400020d000, 0x1000, 0x1000})
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_unix.go:167 +0x200
+net.(*netFD).Read(0x1400017d400, {0x1400020d000?, 0x1000?, 0x1000?})
+	/opt/homebrew/opt/go/libexec/src/net/fd_posix.go:55 +0x28
+net.(*conn).Read(0x1400000e030, {0x1400020d000?, 0x140001b83f8?, 0x100c6d6e8?})
+	/opt/homebrew/opt/go/libexec/src/net/net.go:183 +0x34
+bufio.(*Reader).Read(0x14000200360, {0x140000220f0, 0x1, 0x100f4f74c?})
+	/opt/homebrew/opt/go/libexec/src/bufio/bufio.go:237 +0x1e0
+io.ReadAtLeast({0x1010db660, 0x14000200360}, {0x140000220f0, 0x1, 0x9}, 0x1)
+	/opt/homebrew/opt/go/libexec/src/io/io.go:332 +0xa0
+io.ReadFull(...)
+	/opt/homebrew/opt/go/libexec/src/io/io.go:351
+encoding/gob.decodeUintReader({0x1010db660?, 0x14000200360?}, {0x140000220f0?, 0x9?, 0x9?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decode.go:116 +0x4c
+encoding/gob.(*Decoder).recvMessage(0x14000206180)
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:82 +0x38
+encoding/gob.(*Decoder).decodeTypeSequence(0x14000206180, 0x0)
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:148 +0x50
+encoding/gob.(*Decoder).DecodeValue(0x14000206180, {0x101047140?, 0x14000202420?, 0x6900?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:227 +0x188
+encoding/gob.(*Decoder).Decode(0x14000206180, {0x101047140?, 0x14000202420?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:204 +0x19c
+net/rpc.(*gobClientCodec).ReadResponseHeader(0x140002021b0?, 0x30?)
+	/opt/homebrew/opt/go/libexec/src/net/rpc/client.go:228 +0x2c
+net/rpc.(*Client).input(0x14000200420)
+	/opt/homebrew/opt/go/libexec/src/net/rpc/client.go:109 +0xa0
+created by net/rpc.NewClientWithCodec
+	/opt/homebrew/opt/go/libexec/src/net/rpc/client.go:206 +0xc4
+
+goroutine 9 [IO wait]:
+internal/poll.runtime_pollWait(0x1288ee778, 0x72)
+	/opt/homebrew/opt/go/libexec/src/runtime/netpoll.go:306 +0xa0
+internal/poll.(*pollDesc).wait(0x14000206200?, 0x14000211000?, 0x0)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:84 +0x28
+internal/poll.(*pollDesc).waitRead(...)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0x14000206200, {0x14000211000, 0x1000, 0x1000})
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_unix.go:167 +0x200
+net.(*netFD).Read(0x14000206200, {0x14000211000?, 0x1000?, 0x1000?})
+	/opt/homebrew/opt/go/libexec/src/net/fd_posix.go:55 +0x28
+net.(*conn).Read(0x1400000e040, {0x14000211000?, 0x140001b83f8?, 0x100c6d6e8?})
+	/opt/homebrew/opt/go/libexec/src/net/net.go:183 +0x34
+bufio.(*Reader).Read(0x140002004e0, {0x14000022120, 0x1, 0x100f4f74c?})
+	/opt/homebrew/opt/go/libexec/src/bufio/bufio.go:237 +0x1e0
+io.ReadAtLeast({0x1010db660, 0x140002004e0}, {0x14000022120, 0x1, 0x9}, 0x1)
+	/opt/homebrew/opt/go/libexec/src/io/io.go:332 +0xa0
+io.ReadFull(...)
+	/opt/homebrew/opt/go/libexec/src/io/io.go:351
+encoding/gob.decodeUintReader({0x1010db660?, 0x140002004e0?}, {0x14000022120?, 0x9?, 0x9?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decode.go:116 +0x4c
+encoding/gob.(*Decoder).recvMessage(0x14000206280)
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:82 +0x38
+encoding/gob.(*Decoder).decodeTypeSequence(0x14000206280, 0x0)
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:148 +0x50
+encoding/gob.(*Decoder).DecodeValue(0x14000206280, {0x101047140?, 0x14000202660?, 0x6900?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:227 +0x188
+encoding/gob.(*Decoder).Decode(0x14000206280, {0x101047140?, 0x14000202660?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:204 +0x19c
+net/rpc.(*gobClientCodec).ReadResponseHeader(0x140002021b0?, 0x30?)
+	/opt/homebrew/opt/go/libexec/src/net/rpc/client.go:228 +0x2c
+net/rpc.(*Client).input(0x140002005a0)
+	/opt/homebrew/opt/go/libexec/src/net/rpc/client.go:109 +0xa0
+created by net/rpc.NewClientWithCodec
+	/opt/homebrew/opt/go/libexec/src/net/rpc/client.go:206 +0xc4
+
+goroutine 5 [IO wait]:
+internal/poll.runtime_pollWait(0x1288ee868, 0x72)
+	/opt/homebrew/opt/go/libexec/src/runtime/netpoll.go:306 +0xa0
+internal/poll.(*pollDesc).wait(0x14000206080?, 0x14000209000?, 0x0)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:84 +0x28
+internal/poll.(*pollDesc).waitRead(...)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0x14000206080, {0x14000209000, 0x1000, 0x1000})
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_unix.go:167 +0x200
+net.(*netFD).Read(0x14000206080, {0x14000209000?, 0x0?, 0x0?})
+	/opt/homebrew/opt/go/libexec/src/net/fd_posix.go:55 +0x28
+net.(*conn).Read(0x1400000e028, {0x14000209000?, 0x0?, 0x0?})
+	/opt/homebrew/opt/go/libexec/src/net/net.go:183 +0x34
+bufio.(*Reader).Read(0x14000200240, {0x140000220c0, 0x1, 0x0?})
+	/opt/homebrew/opt/go/libexec/src/bufio/bufio.go:237 +0x1e0
+io.ReadAtLeast({0x1010db660, 0x14000200240}, {0x140000220c0, 0x1, 0x9}, 0x1)
+	/opt/homebrew/opt/go/libexec/src/io/io.go:332 +0xa0
+io.ReadFull(...)
+	/opt/homebrew/opt/go/libexec/src/io/io.go:351
+encoding/gob.decodeUintReader({0x1010db660?, 0x14000200240?}, {0x140000220c0?, 0x9?, 0x9?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decode.go:116 +0x4c
+encoding/gob.(*Decoder).recvMessage(0x14000206100)
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:82 +0x38
+encoding/gob.(*Decoder).decodeTypeSequence(0x14000206100, 0x0)
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:148 +0x50
+encoding/gob.(*Decoder).DecodeValue(0x14000206100, {0x101047100?, 0x1400007c040?, 0x100f4ef2c?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:227 +0x188
+encoding/gob.(*Decoder).Decode(0x14000206100, {0x101047100?, 0x1400007c040?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:204 +0x19c
+net/rpc.(*gobServerCodec).ReadRequestHeader(0x1000000?, 0x0?)
+	/opt/homebrew/opt/go/libexec/src/net/rpc/server.go:402 +0x2c
+net/rpc.(*Server).readRequestHeader(0x1400019e5c0, {0x1010df248, 0x140002021e0})
+	/opt/homebrew/opt/go/libexec/src/net/rpc/server.go:588 +0x4c
+net/rpc.(*Server).readRequest(0x10150e728?, {0x1010df248, 0x140002021e0})
+	/opt/homebrew/opt/go/libexec/src/net/rpc/server.go:548 +0x28
+net/rpc.(*Server).ServeCodec(0x1400019e5c0, {0x1010df248?, 0x140002021e0})
+	/opt/homebrew/opt/go/libexec/src/net/rpc/server.go:463 +0x5c
+net/rpc.(*Server).ServeConn(0x1400017d068?, {0x12891c008?, 0x1400000e028})
+	/opt/homebrew/opt/go/libexec/src/net/rpc/server.go:454 +0x390
+raftkv/raft.(*Server).Serve.func1.1()
+	/Users/lydiayuan/Capstone-Project/raft/server.go:75 +0x50
+created by raftkv/raft.(*Server).Serve.func1
+	/Users/lydiayuan/Capstone-Project/raft/server.go:74 +0x64
+
+goroutine 49 [IO wait]:
+internal/poll.runtime_pollWait(0x1288ee598, 0x72)
+	/opt/homebrew/opt/go/libexec/src/runtime/netpoll.go:306 +0xa0
+internal/poll.(*pollDesc).wait(0x14000206300?, 0x14000289000?, 0x0)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:84 +0x28
+internal/poll.(*pollDesc).waitRead(...)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0x14000206300, {0x14000289000, 0x1000, 0x1000})
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_unix.go:167 +0x200
+net.(*netFD).Read(0x14000206300, {0x14000289000?, 0x1000?, 0x1000?})
+	/opt/homebrew/opt/go/libexec/src/net/fd_posix.go:55 +0x28
+net.(*conn).Read(0x14000286000, {0x14000289000?, 0x0?, 0x0?})
+	/opt/homebrew/opt/go/libexec/src/net/net.go:183 +0x34
+bufio.(*Reader).Read(0x14000282060, {0x1400028e000, 0x1, 0x0?})
+	/opt/homebrew/opt/go/libexec/src/bufio/bufio.go:237 +0x1e0
+io.ReadAtLeast({0x1010db660, 0x14000282060}, {0x1400028e000, 0x1, 0x9}, 0x1)
+	/opt/homebrew/opt/go/libexec/src/io/io.go:332 +0xa0
+io.ReadFull(...)
+	/opt/homebrew/opt/go/libexec/src/io/io.go:351
+encoding/gob.decodeUintReader({0x1010db660?, 0x14000282060?}, {0x1400028e000?, 0x9?, 0x9?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decode.go:116 +0x4c
+encoding/gob.(*Decoder).recvMessage(0x1400028c000)
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:82 +0x38
+encoding/gob.(*Decoder).decodeTypeSequence(0x1400028c000, 0x0)
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:148 +0x50
+encoding/gob.(*Decoder).DecodeValue(0x1400028c000, {0x101047140?, 0x14000202690?, 0x0?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:227 +0x188
+encoding/gob.(*Decoder).Decode(0x1400028c000, {0x101047140?, 0x14000202690?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:204 +0x19c
+net/rpc.(*gobClientCodec).ReadResponseHeader(0x0?, 0x0?)
+	/opt/homebrew/opt/go/libexec/src/net/rpc/client.go:228 +0x2c
+net/rpc.(*Client).input(0x14000282120)
+	/opt/homebrew/opt/go/libexec/src/net/rpc/client.go:109 +0xa0
+created by net/rpc.NewClientWithCodec
+	/opt/homebrew/opt/go/libexec/src/net/rpc/client.go:206 +0xc4
+
+goroutine 19 [IO wait]:
+internal/poll.runtime_pollWait(0x1288ee688, 0x72)
+	/opt/homebrew/opt/go/libexec/src/runtime/netpoll.go:306 +0xa0
+internal/poll.(*pollDesc).wait(0x140000a8000?, 0x140000af000?, 0x0)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:84 +0x28
+internal/poll.(*pollDesc).waitRead(...)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0x140000a8000, {0x140000af000, 0x1000, 0x1000})
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_unix.go:167 +0x200
+net.(*netFD).Read(0x140000a8000, {0x140000af000?, 0x0?, 0x0?})
+	/opt/homebrew/opt/go/libexec/src/net/fd_posix.go:55 +0x28
+net.(*conn).Read(0x140000ac000, {0x140000af000?, 0x0?, 0x0?})
+	/opt/homebrew/opt/go/libexec/src/net/net.go:183 +0x34
+bufio.(*Reader).Read(0x14000092120, {0x140000b2000, 0x1, 0x0?})
+	/opt/homebrew/opt/go/libexec/src/bufio/bufio.go:237 +0x1e0
+io.ReadAtLeast({0x1010db660, 0x14000092120}, {0x140000b2000, 0x1, 0x9}, 0x1)
+	/opt/homebrew/opt/go/libexec/src/io/io.go:332 +0xa0
+io.ReadFull(...)
+	/opt/homebrew/opt/go/libexec/src/io/io.go:351
+encoding/gob.decodeUintReader({0x1010db660?, 0x14000092120?}, {0x140000b2000?, 0x9?, 0x9?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decode.go:116 +0x4c
+encoding/gob.(*Decoder).recvMessage(0x140000a8080)
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:82 +0x38
+encoding/gob.(*Decoder).decodeTypeSequence(0x140000a8080, 0x0)
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:148 +0x50
+encoding/gob.(*Decoder).DecodeValue(0x140000a8080, {0x101047100?, 0x14000090040?, 0x100f4ef2c?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:227 +0x188
+encoding/gob.(*Decoder).Decode(0x140000a8080, {0x101047100?, 0x14000090040?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:204 +0x19c
+net/rpc.(*gobServerCodec).ReadRequestHeader(0x140001b94b8?, 0x100c09d54?)
+	/opt/homebrew/opt/go/libexec/src/net/rpc/server.go:402 +0x2c
+net/rpc.(*Server).readRequestHeader(0x1400019e640, {0x1010df248, 0x140000aa120})
+	/opt/homebrew/opt/go/libexec/src/net/rpc/server.go:588 +0x4c
+net/rpc.(*Server).readRequest(0x128899048?, {0x1010df248, 0x140000aa120})
+	/opt/homebrew/opt/go/libexec/src/net/rpc/server.go:548 +0x28
+net/rpc.(*Server).ServeCodec(0x1400019e640, {0x1010df248?, 0x140000aa120})
+	/opt/homebrew/opt/go/libexec/src/net/rpc/server.go:463 +0x5c
+net/rpc.(*Server).ServeConn(0x1400017d268?, {0x12891c008?, 0x140000ac000})
+	/opt/homebrew/opt/go/libexec/src/net/rpc/server.go:454 +0x390
+raftkv/raft.(*Server).Serve.func1.1()
+	/Users/lydiayuan/Capstone-Project/raft/server.go:75 +0x50
+created by raftkv/raft.(*Server).Serve.func1
+	/Users/lydiayuan/Capstone-Project/raft/server.go:74 +0x64
+
+goroutine 45 [IO wait]:
+internal/poll.runtime_pollWait(0x1288ee3b8, 0x72)
+	/opt/homebrew/opt/go/libexec/src/runtime/netpoll.go:306 +0xa0
+internal/poll.(*pollDesc).wait(0x1400028c080?, 0x140001c2000?, 0x0)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:84 +0x28
+internal/poll.(*pollDesc).waitRead(...)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0x1400028c080, {0x140001c2000, 0x1000, 0x1000})
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_unix.go:167 +0x200
+net.(*netFD).Read(0x1400028c080, {0x140001c2000?, 0x1000?, 0x1000?})
+	/opt/homebrew/opt/go/libexec/src/net/fd_posix.go:55 +0x28
+net.(*conn).Read(0x14000118648, {0x140001c2000?, 0x140001b73f8?, 0x100c6d6e8?})
+	/opt/homebrew/opt/go/libexec/src/net/net.go:183 +0x34
+bufio.(*Reader).Read(0x1400011ab40, {0x14000110b20, 0x1, 0x100f4f74c?})
+	/opt/homebrew/opt/go/libexec/src/bufio/bufio.go:237 +0x1e0
+io.ReadAtLeast({0x1010db660, 0x1400011ab40}, {0x14000110b20, 0x1, 0x9}, 0x1)
+	/opt/homebrew/opt/go/libexec/src/io/io.go:332 +0xa0
+io.ReadFull(...)
+	/opt/homebrew/opt/go/libexec/src/io/io.go:351
+encoding/gob.decodeUintReader({0x1010db660?, 0x1400011ab40?}, {0x14000110b20?, 0x9?, 0x9?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decode.go:116 +0x4c
+encoding/gob.(*Decoder).recvMessage(0x1400017d580)
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:82 +0x38
+encoding/gob.(*Decoder).decodeTypeSequence(0x1400017d580, 0x0)
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:148 +0x50
+encoding/gob.(*Decoder).DecodeValue(0x1400017d580, {0x101047140?, 0x14000202810?, 0xc580?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:227 +0x188
+encoding/gob.(*Decoder).Decode(0x1400017d580, {0x101047140?, 0x14000202810?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:204 +0x19c
+net/rpc.(*gobClientCodec).ReadResponseHeader(0x14000180de0?, 0x30?)
+	/opt/homebrew/opt/go/libexec/src/net/rpc/client.go:228 +0x2c
+net/rpc.(*Client).input(0x1400011ac00)
+	/opt/homebrew/opt/go/libexec/src/net/rpc/client.go:109 +0xa0
+created by net/rpc.NewClientWithCodec
+	/opt/homebrew/opt/go/libexec/src/net/rpc/client.go:206 +0xc4
+
+goroutine 44 [IO wait]:
+internal/poll.runtime_pollWait(0x1288ee4a8, 0x72)
+	/opt/homebrew/opt/go/libexec/src/runtime/netpoll.go:306 +0xa0
+internal/poll.(*pollDesc).wait(0x1400017d480?, 0x140001c0000?, 0x0)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:84 +0x28
+internal/poll.(*pollDesc).waitRead(...)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0x1400017d480, {0x140001c0000, 0x1000, 0x1000})
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_unix.go:167 +0x200
+net.(*netFD).Read(0x1400017d480, {0x140001c0000?, 0x0?, 0x0?})
+	/opt/homebrew/opt/go/libexec/src/net/fd_posix.go:55 +0x28
+net.(*conn).Read(0x14000118640, {0x140001c0000?, 0x0?, 0x0?})
+	/opt/homebrew/opt/go/libexec/src/net/net.go:183 +0x34
+bufio.(*Reader).Read(0x1400011aa20, {0x14000110af0, 0x1, 0x0?})
+	/opt/homebrew/opt/go/libexec/src/bufio/bufio.go:237 +0x1e0
+io.ReadAtLeast({0x1010db660, 0x1400011aa20}, {0x14000110af0, 0x1, 0x9}, 0x1)
+	/opt/homebrew/opt/go/libexec/src/io/io.go:332 +0xa0
+io.ReadFull(...)
+	/opt/homebrew/opt/go/libexec/src/io/io.go:351
+encoding/gob.decodeUintReader({0x1010db660?, 0x1400011aa20?}, {0x14000110af0?, 0x9?, 0x9?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decode.go:116 +0x4c
+encoding/gob.(*Decoder).recvMessage(0x1400017d500)
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:82 +0x38
+encoding/gob.(*Decoder).decodeTypeSequence(0x1400017d500, 0x0)
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:148 +0x50
+encoding/gob.(*Decoder).DecodeValue(0x1400017d500, {0x101047100?, 0x14000156800?, 0x100f4ef2c?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:227 +0x188
+encoding/gob.(*Decoder).Decode(0x1400017d500, {0x101047100?, 0x14000156800?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:204 +0x19c
+net/rpc.(*gobServerCodec).ReadRequestHeader(0x140001b74b8?, 0x100c09d54?)
+	/opt/homebrew/opt/go/libexec/src/net/rpc/server.go:402 +0x2c
+net/rpc.(*Server).readRequestHeader(0x1400019e480, {0x1010df248, 0x14000180e10})
+	/opt/homebrew/opt/go/libexec/src/net/rpc/server.go:588 +0x4c
+net/rpc.(*Server).readRequest(0x140001b7668?, {0x1010df248, 0x14000180e10})
+	/opt/homebrew/opt/go/libexec/src/net/rpc/server.go:548 +0x28
+net/rpc.(*Server).ServeCodec(0x1400019e480, {0x1010df248?, 0x14000180e10})
+	/opt/homebrew/opt/go/libexec/src/net/rpc/server.go:463 +0x5c
+net/rpc.(*Server).ServeConn(0x1400017ce68?, {0x12891c008?, 0x14000118640})
+	/opt/homebrew/opt/go/libexec/src/net/rpc/server.go:454 +0x390
+raftkv/raft.(*Server).Serve.func1.1()
+	/Users/lydiayuan/Capstone-Project/raft/server.go:75 +0x50
+created by raftkv/raft.(*Server).Serve.func1
+	/Users/lydiayuan/Capstone-Project/raft/server.go:74 +0x64
+
+goroutine 13 [IO wait]:
+internal/poll.runtime_pollWait(0x1288ee1d8, 0x72)
+	/opt/homebrew/opt/go/libexec/src/runtime/netpoll.go:306 +0xa0
+internal/poll.(*pollDesc).wait(0x1400017d600?, 0x1400021d000?, 0x0)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:84 +0x28
+internal/poll.(*pollDesc).waitRead(...)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0x1400017d600, {0x1400021d000, 0x1000, 0x1000})
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_unix.go:167 +0x200
+net.(*netFD).Read(0x1400017d600, {0x1400021d000?, 0x1000?, 0x1000?})
+	/opt/homebrew/opt/go/libexec/src/net/fd_posix.go:55 +0x28
+net.(*conn).Read(0x1400000e050, {0x1400021d000?, 0x140001b73f8?, 0x100c6d6e8?})
+	/opt/homebrew/opt/go/libexec/src/net/net.go:183 +0x34
+bufio.(*Reader).Read(0x14000200720, {0x14000022180, 0x1, 0x100f4f74c?})
+	/opt/homebrew/opt/go/libexec/src/bufio/bufio.go:237 +0x1e0
+io.ReadAtLeast({0x1010db660, 0x14000200720}, {0x14000022180, 0x1, 0x9}, 0x1)
+	/opt/homebrew/opt/go/libexec/src/io/io.go:332 +0xa0
+io.ReadFull(...)
+	/opt/homebrew/opt/go/libexec/src/io/io.go:351
+encoding/gob.decodeUintReader({0x1010db660?, 0x14000200720?}, {0x14000022180?, 0x9?, 0x9?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decode.go:116 +0x4c
+encoding/gob.(*Decoder).recvMessage(0x14000206480)
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:82 +0x38
+encoding/gob.(*Decoder).decodeTypeSequence(0x14000206480, 0x0)
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:148 +0x50
+encoding/gob.(*Decoder).DecodeValue(0x14000206480, {0x101047140?, 0x14000284360?, 0xc580?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:227 +0x188
+encoding/gob.(*Decoder).Decode(0x14000206480, {0x101047140?, 0x14000284360?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:204 +0x19c
+net/rpc.(*gobClientCodec).ReadResponseHeader(0x14000180de0?, 0x30?)
+	/opt/homebrew/opt/go/libexec/src/net/rpc/client.go:228 +0x2c
+net/rpc.(*Client).input(0x140002007e0)
+	/opt/homebrew/opt/go/libexec/src/net/rpc/client.go:109 +0xa0
+created by net/rpc.NewClientWithCodec
+	/opt/homebrew/opt/go/libexec/src/net/rpc/client.go:206 +0xc4
+
+goroutine 12 [IO wait]:
+internal/poll.runtime_pollWait(0x1288ee2c8, 0x72)
+	/opt/homebrew/opt/go/libexec/src/runtime/netpoll.go:306 +0xa0
+internal/poll.(*pollDesc).wait(0x14000206380?, 0x14000213000?, 0x0)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:84 +0x28
+internal/poll.(*pollDesc).waitRead(...)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0x14000206380, {0x14000213000, 0x1000, 0x1000})
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_unix.go:167 +0x200
+net.(*netFD).Read(0x14000206380, {0x14000213000?, 0x0?, 0x0?})
+	/opt/homebrew/opt/go/libexec/src/net/fd_posix.go:55 +0x28
+net.(*conn).Read(0x1400000e048, {0x14000213000?, 0x0?, 0x0?})
+	/opt/homebrew/opt/go/libexec/src/net/net.go:183 +0x34
+bufio.(*Reader).Read(0x14000200660, {0x14000022150, 0x1, 0x0?})
+	/opt/homebrew/opt/go/libexec/src/bufio/bufio.go:237 +0x1e0
+io.ReadAtLeast({0x1010db660, 0x14000200660}, {0x14000022150, 0x1, 0x9}, 0x1)
+	/opt/homebrew/opt/go/libexec/src/io/io.go:332 +0xa0
+io.ReadFull(...)
+	/opt/homebrew/opt/go/libexec/src/io/io.go:351
+encoding/gob.decodeUintReader({0x1010db660?, 0x14000200660?}, {0x14000022150?, 0x9?, 0x9?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decode.go:116 +0x4c
+encoding/gob.(*Decoder).recvMessage(0x14000206400)
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:82 +0x38
+encoding/gob.(*Decoder).decodeTypeSequence(0x14000206400, 0x0)
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:148 +0x50
+encoding/gob.(*Decoder).DecodeValue(0x14000206400, {0x101047100?, 0x1400007c100?, 0x100f4ef2c?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:227 +0x188
+encoding/gob.(*Decoder).Decode(0x14000206400, {0x101047100?, 0x1400007c100?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:204 +0x19c
+net/rpc.(*gobServerCodec).ReadRequestHeader(0x1400028e000?, 0x1?)
+	/opt/homebrew/opt/go/libexec/src/net/rpc/server.go:402 +0x2c
+net/rpc.(*Server).readRequestHeader(0x1400019e640, {0x1010df248, 0x140002027e0})
+	/opt/homebrew/opt/go/libexec/src/net/rpc/server.go:588 +0x4c
+net/rpc.(*Server).readRequest(0x140001b2668?, {0x1010df248, 0x140002027e0})
+	/opt/homebrew/opt/go/libexec/src/net/rpc/server.go:548 +0x28
+net/rpc.(*Server).ServeCodec(0x1400019e640, {0x1010df248?, 0x140002027e0})
+	/opt/homebrew/opt/go/libexec/src/net/rpc/server.go:463 +0x5c
+net/rpc.(*Server).ServeConn(0x0?, {0x12891c008?, 0x1400000e048})
+	/opt/homebrew/opt/go/libexec/src/net/rpc/server.go:454 +0x390
+raftkv/raft.(*Server).Serve.func1.1()
+	/Users/lydiayuan/Capstone-Project/raft/server.go:75 +0x50
+created by raftkv/raft.(*Server).Serve.func1
+	/Users/lydiayuan/Capstone-Project/raft/server.go:74 +0x64
+
+goroutine 53 [IO wait]:
+internal/poll.runtime_pollWait(0x1288edff8, 0x72)
+	/opt/homebrew/opt/go/libexec/src/runtime/netpoll.go:306 +0xa0
+internal/poll.(*pollDesc).wait(0x14000206500?, 0x140002a3000?, 0x0)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:84 +0x28
+internal/poll.(*pollDesc).waitRead(...)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0x14000206500, {0x140002a3000, 0x1000, 0x1000})
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_unix.go:167 +0x200
+net.(*netFD).Read(0x14000206500, {0x140002a3000?, 0x1000?, 0x1000?})
+	/opt/homebrew/opt/go/libexec/src/net/fd_posix.go:55 +0x28
+net.(*conn).Read(0x14000286018, {0x140002a3000?, 0x140001b73f8?, 0x100c6d6e8?})
+	/opt/homebrew/opt/go/libexec/src/net/net.go:183 +0x34
+bufio.(*Reader).Read(0x140002822a0, {0x1400028e060, 0x1, 0x100f4f74c?})
+	/opt/homebrew/opt/go/libexec/src/bufio/bufio.go:237 +0x1e0
+io.ReadAtLeast({0x1010db660, 0x140002822a0}, {0x1400028e060, 0x1, 0x9}, 0x1)
+	/opt/homebrew/opt/go/libexec/src/io/io.go:332 +0xa0
+io.ReadFull(...)
+	/opt/homebrew/opt/go/libexec/src/io/io.go:351
+encoding/gob.decodeUintReader({0x1010db660?, 0x140002822a0?}, {0x1400028e060?, 0x9?, 0x9?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decode.go:116 +0x4c
+encoding/gob.(*Decoder).recvMessage(0x1400028c200)
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:82 +0x38
+encoding/gob.(*Decoder).decodeTypeSequence(0x1400028c200, 0x0)
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:148 +0x50
+encoding/gob.(*Decoder).DecodeValue(0x1400028c200, {0x101047140?, 0x14000284510?, 0xc580?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:227 +0x188
+encoding/gob.(*Decoder).Decode(0x1400028c200, {0x101047140?, 0x14000284510?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:204 +0x19c
+net/rpc.(*gobClientCodec).ReadResponseHeader(0x14000180de0?, 0x30?)
+	/opt/homebrew/opt/go/libexec/src/net/rpc/client.go:228 +0x2c
+net/rpc.(*Client).input(0x14000282360)
+	/opt/homebrew/opt/go/libexec/src/net/rpc/client.go:109 +0xa0
+created by net/rpc.NewClientWithCodec
+	/opt/homebrew/opt/go/libexec/src/net/rpc/client.go:206 +0xc4
+
+goroutine 52 [IO wait]:
+internal/poll.runtime_pollWait(0x1288ee0e8, 0x72)
+	/opt/homebrew/opt/go/libexec/src/runtime/netpoll.go:306 +0xa0
+internal/poll.(*pollDesc).wait(0x1400028c100?, 0x140002a1000?, 0x0)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:84 +0x28
+internal/poll.(*pollDesc).waitRead(...)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0x1400028c100, {0x140002a1000, 0x1000, 0x1000})
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_unix.go:167 +0x200
+net.(*netFD).Read(0x1400028c100, {0x140002a1000?, 0x0?, 0x0?})
+	/opt/homebrew/opt/go/libexec/src/net/fd_posix.go:55 +0x28
+net.(*conn).Read(0x14000286010, {0x140002a1000?, 0x0?, 0x0?})
+	/opt/homebrew/opt/go/libexec/src/net/net.go:183 +0x34
+bufio.(*Reader).Read(0x140002821e0, {0x1400028e030, 0x1, 0x0?})
+	/opt/homebrew/opt/go/libexec/src/bufio/bufio.go:237 +0x1e0
+io.ReadAtLeast({0x1010db660, 0x140002821e0}, {0x1400028e030, 0x1, 0x9}, 0x1)
+	/opt/homebrew/opt/go/libexec/src/io/io.go:332 +0xa0
+io.ReadFull(...)
+	/opt/homebrew/opt/go/libexec/src/io/io.go:351
+encoding/gob.decodeUintReader({0x1010db660?, 0x140002821e0?}, {0x1400028e030?, 0x9?, 0x9?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decode.go:116 +0x4c
+encoding/gob.(*Decoder).recvMessage(0x1400028c180)
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:82 +0x38
+encoding/gob.(*Decoder).decodeTypeSequence(0x1400028c180, 0x0)
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:148 +0x50
+encoding/gob.(*Decoder).DecodeValue(0x1400028c180, {0x101047100?, 0x14000298060?, 0x100f4ef2c?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:227 +0x188
+encoding/gob.(*Decoder).Decode(0x1400028c180, {0x101047100?, 0x14000298060?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:204 +0x19c
+net/rpc.(*gobServerCodec).ReadRequestHeader(0x0?, 0x0?)
+	/opt/homebrew/opt/go/libexec/src/net/rpc/server.go:402 +0x2c
+net/rpc.(*Server).readRequestHeader(0x1400019e480, {0x1010df248, 0x14000284330})
+	/opt/homebrew/opt/go/libexec/src/net/rpc/server.go:588 +0x4c
+net/rpc.(*Server).readRequest(0x140001b2e68?, {0x1010df248, 0x14000284330})
+	/opt/homebrew/opt/go/libexec/src/net/rpc/server.go:548 +0x28
+net/rpc.(*Server).ServeCodec(0x1400019e480, {0x1010df248?, 0x14000284330})
+	/opt/homebrew/opt/go/libexec/src/net/rpc/server.go:463 +0x5c
+net/rpc.(*Server).ServeConn(0x0?, {0x12891c008?, 0x14000286010})
+	/opt/homebrew/opt/go/libexec/src/net/rpc/server.go:454 +0x390
+raftkv/raft.(*Server).Serve.func1.1()
+	/Users/lydiayuan/Capstone-Project/raft/server.go:75 +0x50
+created by raftkv/raft.(*Server).Serve.func1
+	/Users/lydiayuan/Capstone-Project/raft/server.go:74 +0x64
+
+goroutine 16 [IO wait]:
+internal/poll.runtime_pollWait(0x1288edf08, 0x72)
+	/opt/homebrew/opt/go/libexec/src/runtime/netpoll.go:306 +0xa0
+internal/poll.(*pollDesc).wait(0x14000206580?, 0x1400021f000?, 0x0)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:84 +0x28
+internal/poll.(*pollDesc).waitRead(...)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0x14000206580, {0x1400021f000, 0x1000, 0x1000})
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_unix.go:167 +0x200
+net.(*netFD).Read(0x14000206580, {0x1400021f000?, 0x0?, 0x0?})
+	/opt/homebrew/opt/go/libexec/src/net/fd_posix.go:55 +0x28
+net.(*conn).Read(0x1400000e058, {0x1400021f000?, 0x0?, 0x0?})
+	/opt/homebrew/opt/go/libexec/src/net/net.go:183 +0x34
+bufio.(*Reader).Read(0x140002008a0, {0x140000221b0, 0x1, 0x0?})
+	/opt/homebrew/opt/go/libexec/src/bufio/bufio.go:237 +0x1e0
+io.ReadAtLeast({0x1010db660, 0x140002008a0}, {0x140000221b0, 0x1, 0x9}, 0x1)
+	/opt/homebrew/opt/go/libexec/src/io/io.go:332 +0xa0
+io.ReadFull(...)
+	/opt/homebrew/opt/go/libexec/src/io/io.go:351
+encoding/gob.decodeUintReader({0x1010db660?, 0x140002008a0?}, {0x140000221b0?, 0x9?, 0x9?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decode.go:116 +0x4c
+encoding/gob.(*Decoder).recvMessage(0x14000206600)
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:82 +0x38
+encoding/gob.(*Decoder).decodeTypeSequence(0x14000206600, 0x0)
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:148 +0x50
+encoding/gob.(*Decoder).DecodeValue(0x14000206600, {0x101047100?, 0x1400007c180?, 0x100f4ef2c?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:227 +0x188
+encoding/gob.(*Decoder).Decode(0x14000206600, {0x101047100?, 0x1400007c180?})
+	/opt/homebrew/opt/go/libexec/src/encoding/gob/decoder.go:204 +0x19c
+net/rpc.(*gobServerCodec).ReadRequestHeader(0x1400028e000?, 0x1?)
+	/opt/homebrew/opt/go/libexec/src/net/rpc/server.go:402 +0x2c
+net/rpc.(*Server).readRequestHeader(0x1400019e5c0, {0x1010df248, 0x14000202b70})
+	/opt/homebrew/opt/go/libexec/src/net/rpc/server.go:588 +0x4c
+net/rpc.(*Server).readRequest(0x140001b2668?, {0x1010df248, 0x14000202b70})
+	/opt/homebrew/opt/go/libexec/src/net/rpc/server.go:548 +0x28
+net/rpc.(*Server).ServeCodec(0x1400019e5c0, {0x1010df248?, 0x14000202b70})
+	/opt/homebrew/opt/go/libexec/src/net/rpc/server.go:463 +0x5c
+net/rpc.(*Server).ServeConn(0x0?, {0x12891c008?, 0x1400000e058})
+	/opt/homebrew/opt/go/libexec/src/net/rpc/server.go:454 +0x390
+raftkv/raft.(*Server).Serve.func1.1()
+	/Users/lydiayuan/Capstone-Project/raft/server.go:75 +0x50
+created by raftkv/raft.(*Server).Serve.func1
+	/Users/lydiayuan/Capstone-Project/raft/server.go:74 +0x64
+
+goroutine 87 [IO wait]:
+internal/poll.runtime_pollWait(0x1288edd28, 0x72)
+	/opt/homebrew/opt/go/libexec/src/runtime/netpoll.go:306 +0xa0
+internal/poll.(*pollDesc).wait(0x14000314080?, 0x14000181091?, 0x0)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:84 +0x28
+internal/poll.(*pollDesc).waitRead(...)
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0x14000314080, {0x14000181091, 0x1, 0x1})
+	/opt/homebrew/opt/go/libexec/src/internal/poll/fd_unix.go:167 +0x200
+net.(*netFD).Read(0x14000314080, {0x14000181091?, 0x0?, 0x0?})
+	/opt/homebrew/opt/go/libexec/src/net/fd_posix.go:55 +0x28
+net.(*conn).Read(0x14000318018, {0x14000181091?, 0x0?, 0x0?})
+	/opt/homebrew/opt/go/libexec/src/net/net.go:183 +0x34
+net/http.(*connReader).backgroundRead(0x14000181080)
+	/opt/homebrew/opt/go/libexec/src/net/http/server.go:674 +0x44
+created by net/http.(*connReader).startBackgroundRead
+	/opt/homebrew/opt/go/libexec/src/net/http/server.go:670 +0xcc
