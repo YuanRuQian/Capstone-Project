@@ -126,6 +126,9 @@ func (networkInterface *NetworkInterface) RequestVote(id int, args RequestVoteAr
 		return
 	}
 
+	networkInterface.mu.Lock()
+	defer networkInterface.mu.Unlock()
+
 	if networkInterface.peerServers[id] == nil || networkInterface.peerServers[id].node == nil {
 		return
 	}
@@ -141,6 +144,9 @@ func (networkInterface *NetworkInterface) AppendEntries(id int, args AppendEntri
 		DebuggerLog(fmt.Sprintf("NetworkInterface %v has been shutdown, no more AppendEntries", networkInterface.serverId))
 		return
 	}
+
+	networkInterface.mu.Lock()
+	defer networkInterface.mu.Unlock()
 
 	if networkInterface.peerServers[id] == nil || networkInterface.peerServers[id].node == nil {
 		return
@@ -174,6 +180,9 @@ func (networkInterface *NetworkInterface) SendRequestVoteReply(replierId, destin
 		DebuggerLog(fmt.Sprintf("NetworkInterface %v has been shutdown, no more SendRequestVoteReply", networkInterface.serverId))
 		return nil
 	}
+
+	networkInterface.mu.Lock()
+	defer networkInterface.mu.Unlock()
 
 	if networkInterface.peerServers[destinationId] == nil || networkInterface.peerServers[destinationId].node == nil {
 		return nil
