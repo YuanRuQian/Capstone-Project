@@ -161,7 +161,7 @@ func (networkInterface *NetworkInterface) AppendEntries(currentNextIndex, receiv
 	}
 }
 
-func (networkInterface *NetworkInterface) SendAppendEntriesReply(replierId, destinationId int, args AppendEntriesArgs, reply AppendEntriesReply) {
+func (networkInterface *NetworkInterface) SendAppendEntriesReply(currentNextIndex, replierId, destinationId int, args AppendEntriesArgs, reply AppendEntriesReply) {
 	if hasBeenShutdown := networkInterface.prePRCShutdownCheck(); hasBeenShutdown {
 		DebuggerLog(fmt.Sprintf("NetworkInterface %v has been shutdown, no more SendAppendEntriesReply", networkInterface.serverId))
 		return

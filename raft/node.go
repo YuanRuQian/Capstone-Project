@@ -243,7 +243,7 @@ func (node *Node) handleAppendEntries(op *AppendEntriesOp) {
 
 	reply.Term = node.volatileStateInfo.CurrentTerm
 
-	go node.networkInterface.SendAppendEntriesReply(node.id, op.args.LeaderID, op.args, *reply)
+	go node.networkInterface.SendAppendEntriesReply(op.currentNextIndex, node.id, op.args.LeaderID, op.args, *reply)
 }
 
 func (node *Node) handleRequestVote(op *RequestVoteOp) {
@@ -289,12 +289,10 @@ func (node *Node) startElection() {
 		CandidateID: node.id,
 	}
 
-	go func(args RequestVoteArgs) {
-		for _, peerId := range node.peers {
-			DebuggerLog("Node %v: Send RequestVote to %v", node.id, peerId)
-			node.networkInterface.RequestVote(peerId, args)
-		}
-	}(args)
+	for _, peerId := range node.peers {
+		DebuggerLog("Node %v: Send RequestVote to %v", node.id, peerId)
+		go node.networkInterface.RequestVote(peerId, args)
+	}
 }
 
 func (node *Node) HandleStopRPC() {
@@ -361,33 +359,26 @@ func (node *Node) handleLeaderSendHeartbeatTicker() {
 
 	node.savedCurrentTerm = node.volatileStateInfo.CurrentTerm
 
-	args := AppendEntriesArgs{
-		Term:     node.volatileStateInfo.CurrentTerm,
-		LeaderID: node.id,
-	}
-
-	go func(args AppendEntriesArgs) {
-		for _, peerId := range node.peers {
-			currentNextIndex := node.nextIndex[peerId]
-			prevLogIndex := currentNextIndex - 1
-			prevLogTerm := -1
-			if prevLogIndex >= 0 {
-				prevLogTerm = node.log[prevLogIndex].Term
-			}
-			entries := node.log[currentNextIndex:]
-
-			args := AppendEntriesArgs{
-				Term:         node.savedCurrentTerm,
-				LeaderID:     node.id,
-				PrevLogIndex: prevLogIndex,
-				PrevLogTerm:  prevLogTerm,
-				Entries:      entries,
-				LeaderCommit: node.commitIndex,
-			}
-
-			node.networkInterface.AppendEntries(currentNextIndex, peerId, args)
+	for _, peerId := range node.peers {
+		currentNextIndex := node.nextIndex[peerId]
+		prevLogIndex := currentNextIndex - 1
+		prevLogTerm := -1
+		if prevLogIndex >= 0 {
+			prevLogTerm = node.log[prevLogIndex].Term
 		}
-	}(args)
+		entries := node.log[currentNextIndex:]
+
+		args := AppendEntriesArgs{
+			Term:         node.savedCurrentTerm,
+			LeaderID:     node.id,
+			PrevLogIndex: prevLogIndex,
+			PrevLogTerm:  prevLogTerm,
+			Entries:      entries,
+			LeaderCommit: node.commitIndex,
+		}
+
+		go node.networkInterface.AppendEntries(currentNextIndex, peerId, args)
+	}
 }
 
 func (node *Node) handleElectionStatusCheck() {
@@ -414,13 +405,9 @@ func (node *Node) startElectionTimer() {
 }
 
 func (node *Node) handleAppendEntriesReply(op *AppendEntriesReplyOp) {
-	reply := op.reply
 
 	if op.args.isHeartbeat() {
-		if reply.Term > node.volatileStateInfo.CurrentTerm {
-			node.transitionToFollower(reply.Term)
-			return
-		}
+		node.handleHeartbeat(op)
 	}
 
 	// TODO: handle non heartbeat append entries reply
@@ -518,7 +505,7 @@ func (node *Node) handleHeartbeat(op *AppendEntriesReplyOp) {
 			if node.commitIndex != savedCommitIndex {
 				DebuggerLog("leader sets commitIndex := %d", node.commitIndex)
 				// TODO: notify the client
-				// node.newCommitReadyChan <- struct{}{}
+				// node.newCommitReadyCh <- struct{}{}
 			}
 		} else {
 			node.nextIndex[peerId] = op.currentNextIndex - 1
