@@ -41,13 +41,13 @@ type Node struct {
 	requestVoteOpCh                   chan *RequestVoteOp
 	appendEntriesReplyOpCh            chan *AppendEntriesReplyOp
 	requestVoteReplyOpCh              chan *RequestVoteReplyOp
-	isReadyToRun                      <-chan interface{}
 	stopOpCh                          chan *StopOp
+	reportToClusterOpCh               chan interface{}
+	isReadyToRun                      <-chan interface{}
 	allNodesAreReadyForIncomingSignal *sync.WaitGroup
 	electionStatusCheckerTicker       *time.Ticker
 	electionTermStarted               int
 	electionTimeout                   time.Duration
-	reportToClusterOpCh               chan interface{}
 }
 
 // LogEntry represents a log entry in Raft.
@@ -122,8 +122,6 @@ func (m AppendEntriesArgs) isHeartbeat() bool {
 	return 0 == len(m.Entries)
 }
 
-// TODO: recievier end not processing fast enough
-
 func (node *Node) run() {
 	<-node.isReadyToRun
 
@@ -147,14 +145,17 @@ func (node *Node) run() {
 			select {
 			case <-node.reportToClusterOpCh:
 				node.handleReportToCluster()
+				DebuggerLog("Node %v: enf of handleReportToCluster", node.id)
 				node.printElapsedTime("handleReportToCluster", startTime)
 
 			case <-node.electionStatusCheckerTicker.C:
 				node.handleElectionStatusCheck()
+				DebuggerLog("Node %v: enf of handleElectionStatusCheck", node.id)
 				node.printElapsedTime("handleElectionStatusCheck", startTime)
 
 			case <-leaderSendHeartbeatTicker.C:
 				node.handleLeaderSendHeartbeatTicker()
+				DebuggerLog("Node %v: enf of handleLeaderSendHeartbeatTicker", node.id)
 				node.printElapsedTime("handleLeaderSendHeartbeatTicker", startTime)
 
 			case stopOp := <-node.stopOpCh:
@@ -162,27 +163,31 @@ func (node *Node) run() {
 				leaderSendHeartbeatTicker.Stop()
 				node.electionStatusCheckerTicker.Stop()
 				isRunning = false
+				DebuggerLog("Node %v: enf of handleStopRunning", node.id)
 				node.printElapsedTime("handleStopRunning", startTime)
-				DebuggerLog("Node %v: stop running", node.id)
 
 			case appendEntriesOp := <-node.appendEntriesOpCh:
 				DebuggerLog("Node %v: handle append entries in main loop", node.id)
 				node.handleAppendEntries(appendEntriesOp)
+				DebuggerLog("Node %v: end of handle append entries in main loop", node.id)
 				node.printElapsedTime("handleAppendEntries", startTime)
 
 			case requestVoteOp := <-node.requestVoteOpCh:
 				DebuggerLog("Node %v: handle request vote in main loop", node.id)
 				node.handleRequestVote(requestVoteOp)
+				DebuggerLog("Node %v: end of handle request vote in main loop", node.id)
 				node.printElapsedTime("handleRequestVote", startTime)
 
 			case appendEntriesReplyOp := <-node.appendEntriesReplyOpCh:
 				DebuggerLog("Node %v: handle append entries reply in main loop", node.id)
 				node.handleAppendEntriesReply(appendEntriesReplyOp)
 				node.printElapsedTime("handleAppendEntriesReply", startTime)
+				node.printElapsedTime("handleAppendEntriesReply", startTime)
 
 			case requestVoteReplyOp := <-node.requestVoteReplyOpCh:
 				DebuggerLog("Node %v: handle request vote reply in main loop", node.id)
 				node.handleRequestVoteReply(requestVoteReplyOp)
+				DebuggerLog("Node %v: end of handle request vote reply in main loop", node.id)
 				node.printElapsedTime("handleRequestVoteReply", startTime)
 			}
 		}
@@ -197,7 +202,7 @@ func (node *Node) printElapsedTime(operation string, startTime time.Time) {
 	DebuggerLog("Node %v: %s took %s", node.id, operation, elapsed)
 
 	// Append the result to the timestamp.csv file
-	// node.writeToTimestampFile(operation, elapsed)
+	go node.writeToTimestampFile(operation, elapsed)
 }
 
 func (node *Node) writeToTimestampFile(operation string, elapsed time.Duration) {
@@ -262,10 +267,7 @@ func (node *Node) handleAppendEntries(op *AppendEntriesOp) {
 
 	reply.Term = node.volatileStateInfo.CurrentTerm
 
-	err := node.networkInterface.SendAppendEntriesReply(node.id, op.args.LeaderID, op.args, *reply)
-	if err != nil {
-		panic(fmt.Sprintf("Error in SendAppendEntriesReply RPC: %v", err))
-	}
+	go node.networkInterface.SendAppendEntriesReply(node.id, op.args.LeaderID, op.args, *reply)
 }
 
 func (node *Node) handleRequestVote(op *RequestVoteOp) {
@@ -292,10 +294,7 @@ func (node *Node) handleRequestVote(op *RequestVoteOp) {
 		reply.VoteGranted = false
 	}
 	reply.Term = node.volatileStateInfo.CurrentTerm
-	err := node.networkInterface.SendRequestVoteReply(node.id, op.args.CandidateID, reply)
-	if err != nil {
-		panic(fmt.Sprintf("Error in SendRequestVoteReply RPC: %v", err))
-	}
+	go node.networkInterface.SendRequestVoteReply(node.id, op.args.CandidateID, reply)
 }
 
 func (node *Node) startElection() {
@@ -314,11 +313,12 @@ func (node *Node) startElection() {
 		CandidateID: node.id,
 	}
 
-	for _, peerId := range node.peers {
-		DebuggerLog("Node %v: Send RequestVote to %v", node.id, peerId)
-
-		go node.networkInterface.RequestVote(peerId, args)
-	}
+	go func(args RequestVoteArgs) {
+		for _, peerId := range node.peers {
+			DebuggerLog("Node %v: Send RequestVote to %v", node.id, peerId)
+			node.networkInterface.RequestVote(peerId, args)
+		}
+	}(args)
 }
 
 func (node *Node) HandleStopRPC() {
@@ -386,9 +386,11 @@ func (node *Node) handleLeaderSendHeartbeatTicker() {
 		LeaderID: node.id,
 	}
 
-	for _, peerId := range node.peers {
-		go node.networkInterface.AppendEntries(peerId, args)
-	}
+	go func(args AppendEntriesArgs) {
+		for _, peerId := range node.peers {
+			node.networkInterface.AppendEntries(peerId, args)
+		}
+	}(args)
 }
 
 func (node *Node) handleElectionStatusCheck() {
