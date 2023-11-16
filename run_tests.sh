@@ -31,10 +31,10 @@ echo "Go to your browser at http://localhost:6060/debug/pprof/goroutine?debug=2 
 
 
 # When you run your script with the -debug flag, it will set IsDebugMode to "true," enabling debug logging. If you run your script without the -debug flag, IsDebugMode will remain empty, and debug logging will be disabled.
-#for ((i=1; i<=50; i++))
-#do
+for ((i=1; i<=50; i++))
+do
   IsDebugMode=$IsDebugMode go test -race -v -run TestElectionBasic -bench=. -cpuprofile=cpu.pprof -memprofile=mem.pprof
-#done
+done
 
 #for ((i=1; i<=50; i++))
 #do

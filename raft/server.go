@@ -27,11 +27,14 @@ type NetworkInterface struct {
 	serverClusterWaitGroup sync.WaitGroup
 
 	allNodesAreReadyForIncomingSignal *sync.WaitGroup
+	readyForNewIncomingReport         *sync.WaitGroup
+
+	reportReplyCh chan *ReportReply
 
 	hasBeenShutdown bool
 }
 
-func MakeNewNetworkInterface(serverId int, peerIds []int, ready <-chan interface{}, allNodesAreReadyForIncomingSignal *sync.WaitGroup) *NetworkInterface {
+func MakeNewNetworkInterface(serverId int, peerIds []int, ready <-chan interface{}, allNodesAreReadyForIncomingSignal, readyForNewIncomingReport *sync.WaitGroup, reportReplyCh chan *ReportReply) *NetworkInterface {
 	return &NetworkInterface{
 		serverId:                          serverId,
 		peerIds:                           peerIds,
@@ -39,6 +42,8 @@ func MakeNewNetworkInterface(serverId int, peerIds []int, ready <-chan interface
 		isReadyToStart:                    ready,
 		quit:                              make(chan interface{}),
 		allNodesAreReadyForIncomingSignal: allNodesAreReadyForIncomingSignal,
+		readyForNewIncomingReport:         readyForNewIncomingReport,
+		reportReplyCh:                     reportReplyCh,
 		hasBeenShutdown:                   true,
 	}
 }
@@ -152,6 +157,9 @@ func (networkInterface *NetworkInterface) SendAppendEntriesReply(replierId, dest
 		DebuggerLog(fmt.Sprintf("NetworkInterface %v has been shutdown, no more SendAppendEntriesReply", networkInterface.serverId))
 		return nil
 	}
+
+	networkInterface.mu.Lock()
+	defer networkInterface.mu.Unlock()
 
 	if networkInterface.peerServers[destinationId] == nil || networkInterface.peerServers[destinationId].node == nil {
 		return nil

@@ -47,6 +47,7 @@ type Node struct {
 	electionStatusCheckerTicker       *time.Ticker
 	electionTermStarted               int
 	electionTimeout                   time.Duration
+	reportToClusterOpCh               chan interface{}
 }
 
 // LogEntry represents a log entry in Raft.
@@ -107,6 +108,7 @@ func MakeNewNode(id int, peers []int, server *NetworkInterface, isReadyToRun <-c
 		stopOpCh:                          make(chan *StopOp),
 		allNodesAreReadyForIncomingSignal: allNodesAreReadyForIncomingSignal,
 		electionStatusCheckerTicker:       time.NewTicker(10 * time.Millisecond),
+		reportToClusterOpCh:               make(chan interface{}),
 	}
 
 	allNodesAreReadyForIncomingSignal.Add(1)
@@ -143,6 +145,10 @@ func (node *Node) run() {
 			startTime := time.Now()
 
 			select {
+			case <-node.reportToClusterOpCh:
+				node.handleReportToCluster()
+				node.printElapsedTime("handleReportToCluster", startTime)
+
 			case <-node.electionStatusCheckerTicker.C:
 				node.handleElectionStatusCheck()
 				node.printElapsedTime("handleElectionStatusCheck", startTime)
@@ -364,11 +370,10 @@ func (node *Node) transitionToLeader() {
 	DebuggerLog("Node %v: transition to leader", node.id)
 }
 
-func (node *Node) Report() (id int, term int, isLeader bool) {
+func (node *Node) Report() {
 	// Wait for all nodes in the cluster to be ready for incoming signals
 	node.allNodesAreReadyForIncomingSignal.Wait()
-	DebuggerLog("Node %v: begin to report", node.id)
-	return node.id, node.volatileStateInfo.CurrentTerm, node.volatileStateInfo.State == Leader
+	node.reportToClusterOpCh <- true
 }
 
 func (node *Node) handleLeaderSendHeartbeatTicker() {
@@ -470,4 +475,19 @@ func (node *Node) HandleRequestVoteReplyRPC(replierId int, reply RequestVoteRepl
 	}
 	node.requestVoteReplyOpCh <- requestVoteReplyOp
 	DebuggerLog("Node %v: HandleRequestVoteReplyRPC end", node.id)
+}
+
+func (node *Node) handleReportToCluster() {
+	reportReply := &ReportReply{
+		id:       node.id,
+		term:     node.volatileStateInfo.CurrentTerm,
+		isLeader: node.volatileStateInfo.State == Leader,
+	}
+
+	go func() {
+		node.networkInterface.readyForNewIncomingReport.Wait()
+		node.networkInterface.readyForNewIncomingReport.Add(1)
+		node.networkInterface.reportReplyCh <- reportReply
+		node.networkInterface.readyForNewIncomingReport.Done()
+	}()
 }

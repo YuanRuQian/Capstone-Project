@@ -6,6 +6,12 @@ import (
 	"time"
 )
 
+type ReportReply struct {
+	id       int
+	term     int
+	isLeader bool
+}
+
 type Cluster struct {
 	// cluster is a list of all the raft servers participating in a cluster.
 	cluster []*NetworkInterface
@@ -16,6 +22,9 @@ type Cluster struct {
 	connected []bool
 
 	allNodesAreReadyForIncomingSignal sync.WaitGroup
+	readyForNewIncomingReport         *sync.WaitGroup
+
+	reportReplyCh chan *ReportReply
 
 	n int
 	t *testing.T
@@ -27,6 +36,8 @@ func MakeNewCluster(t *testing.T, n int) *Cluster {
 	ns := make([]*NetworkInterface, n)
 	connected := make([]bool, n)
 	ready := make(chan interface{})
+	readyForNewIncomingReport := sync.WaitGroup{}
+	reportReplyCh := make(chan *ReportReply, n)
 
 	// Create all Servers in this cluster, assign ids and peer ids.
 	for i := 0; i < n; i++ {
@@ -37,7 +48,7 @@ func MakeNewCluster(t *testing.T, n int) *Cluster {
 			}
 		}
 
-		ns[i] = MakeNewNetworkInterface(i, peerIds, ready, &sync.WaitGroup{})
+		ns[i] = MakeNewNetworkInterface(i, peerIds, ready, &sync.WaitGroup{}, &readyForNewIncomingReport, reportReplyCh)
 		ns[i].Serve()
 	}
 
@@ -59,6 +70,8 @@ func MakeNewCluster(t *testing.T, n int) *Cluster {
 		cluster:                           ns,
 		connected:                         connected,
 		allNodesAreReadyForIncomingSignal: sync.WaitGroup{},
+		readyForNewIncomingReport:         &readyForNewIncomingReport,
+		reportReplyCh:                     reportReplyCh,
 		n:                                 n,
 		t:                                 t,
 	}
@@ -116,7 +129,10 @@ func (c *Cluster) CheckSingleLeader() (int, int) {
 		leaderTerm := -1
 		for i := 0; i < c.n; i++ {
 			if c.connected[i] {
-				_, term, isLeader := c.cluster[i].server.node.Report()
+				c.cluster[i].server.node.Report()
+				reportReply := <-c.reportReplyCh
+				term := reportReply.term
+				isLeader := reportReply.isLeader
 				DebuggerLog("CheckSingleLeader: networkInterface %d term %d isLeader %v", i, term, isLeader)
 				if isLeader {
 					if leaderId < 0 {
@@ -151,7 +167,9 @@ func (c *Cluster) CheckSingleLeader() (int, int) {
 func (c *Cluster) CheckNoLeader() {
 	for i := 0; i < c.n; i++ {
 		if c.connected[i] {
-			_, _, isLeader := c.cluster[i].server.node.Report()
+			c.cluster[i].server.node.Report()
+			reportReply := <-c.reportReplyCh
+			isLeader := reportReply.isLeader
 			DebuggerLog("CheckNoLeader: networkInterface %d isLeader %v", i, isLeader)
 			if isLeader {
 				DebuggerLog("networkInterface %d leader; want none", i)
