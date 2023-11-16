@@ -20,6 +20,8 @@ type NetworkInterface struct {
 	peerIds     []int
 	peerServers map[int]*Server
 
+	commitCh chan<- CommitEntry
+
 	server *Server
 
 	isReadyToStart         <-chan interface{}
@@ -34,7 +36,7 @@ type NetworkInterface struct {
 	hasBeenShutdown bool
 }
 
-func MakeNewNetworkInterface(serverId int, peerIds []int, ready <-chan interface{}, allNodesAreReadyForIncomingSignal, readyForNewIncomingReport *sync.WaitGroup, reportReplyCh chan *ReportReply) *NetworkInterface {
+func MakeNewNetworkInterface(serverId int, peerIds []int, ready <-chan interface{}, commitCh chan<- CommitEntry, allNodesAreReadyForIncomingSignal, readyForNewIncomingReport *sync.WaitGroup, reportReplyCh chan *ReportReply) *NetworkInterface {
 	return &NetworkInterface{
 		serverId:                          serverId,
 		peerIds:                           peerIds,
@@ -45,12 +47,13 @@ func MakeNewNetworkInterface(serverId int, peerIds []int, ready <-chan interface
 		readyForNewIncomingReport:         readyForNewIncomingReport,
 		reportReplyCh:                     reportReplyCh,
 		hasBeenShutdown:                   true,
+		commitCh:                          commitCh,
 	}
 }
 
 func (networkInterface *NetworkInterface) Serve() {
 	networkInterface.mu.Lock()
-	node := MakeNewNode(networkInterface.serverId, networkInterface.peerIds, networkInterface, networkInterface.isReadyToStart, networkInterface.allNodesAreReadyForIncomingSignal)
+	node := MakeNewNode(networkInterface.serverId, networkInterface.peerIds, networkInterface, networkInterface.isReadyToStart, networkInterface.commitCh, networkInterface.allNodesAreReadyForIncomingSignal)
 	networkInterface.server = &Server{node: node}
 	networkInterface.hasBeenShutdown = false
 	networkInterface.mu.Unlock()
@@ -139,7 +142,7 @@ func (networkInterface *NetworkInterface) RequestVote(id int, args RequestVoteAr
 	}
 }
 
-func (networkInterface *NetworkInterface) AppendEntries(id int, args AppendEntriesArgs) {
+func (networkInterface *NetworkInterface) AppendEntries(currentNextIndex, receiverId int, args AppendEntriesArgs) {
 	if hasBeenShutdown := networkInterface.prePRCShutdownCheck(); hasBeenShutdown {
 		DebuggerLog(fmt.Sprintf("NetworkInterface %v has been shutdown, no more AppendEntries", networkInterface.serverId))
 		return
@@ -148,11 +151,11 @@ func (networkInterface *NetworkInterface) AppendEntries(id int, args AppendEntri
 	networkInterface.mu.Lock()
 	defer networkInterface.mu.Unlock()
 
-	if networkInterface.peerServers[id] == nil || networkInterface.peerServers[id].node == nil {
+	if networkInterface.peerServers[receiverId] == nil || networkInterface.peerServers[receiverId].node == nil {
 		return
 	}
 
-	err := networkInterface.peerServers[id].node.HandleAppendEntriesRPC(args)
+	err := networkInterface.peerServers[receiverId].node.HandleAppendEntriesRPC(currentNextIndex, receiverId, args)
 	if err != nil {
 		panic(fmt.Sprintf("Error in AppendEntries RPC: %v", err))
 	}

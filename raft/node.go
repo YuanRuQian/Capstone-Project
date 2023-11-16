@@ -48,43 +48,14 @@ type Node struct {
 	electionStatusCheckerTicker       *time.Ticker
 	electionTermStarted               int
 	electionTimeout                   time.Duration
+	savedCurrentTerm                  int
+	nextIndex                         map[int]int
+	matchIndex                        map[int]int
+	commitCh                          chan<- CommitEntry
+	newCommitReadyCh                  chan struct{}
 }
 
-// LogEntry represents a log entry in Raft.
-type LogEntry struct {
-	Term    int
-	Command interface{}
-}
-
-// AppendEntriesArgs represents an AppendEntries RPC.
-type AppendEntriesArgs struct {
-	Term         int
-	LeaderID     int
-	PrevLogIndex int
-	PrevLogTerm  int
-	Entries      []LogEntry
-	LeaderCommit int
-}
-
-type AppendEntriesReply struct {
-	Term    int
-	Success bool
-}
-
-// RequestVoteArgs represents a RequestVote RPC.
-type RequestVoteArgs struct {
-	Term         int
-	CandidateID  int
-	LastLogIndex int
-	LastLogTerm  int
-}
-
-type RequestVoteReply struct {
-	Term        int
-	VoteGranted bool
-}
-
-func MakeNewNode(id int, peers []int, server *NetworkInterface, isReadyToRun <-chan interface{}, allNodesAreReadyForIncomingSignal *sync.WaitGroup) *Node {
+func MakeNewNode(id int, peers []int, server *NetworkInterface, isReadyToRun <-chan interface{}, commitCh chan<- CommitEntry, allNodesAreReadyForIncomingSignal *sync.WaitGroup) *Node {
 	defaultVolatileStateInfo := VolatileStateInfo{
 		State:             Follower,
 		CurrentTerm:       0,
@@ -109,6 +80,11 @@ func MakeNewNode(id int, peers []int, server *NetworkInterface, isReadyToRun <-c
 		allNodesAreReadyForIncomingSignal: allNodesAreReadyForIncomingSignal,
 		electionStatusCheckerTicker:       time.NewTicker(10 * time.Millisecond),
 		reportToClusterOpCh:               make(chan interface{}),
+		savedCurrentTerm:                  -1,
+		nextIndex:                         make(map[int]int),
+		matchIndex:                        make(map[int]int),
+		commitCh:                          commitCh,
+		newCommitReadyCh:                  make(chan struct{}, 16),
 	}
 
 	allNodesAreReadyForIncomingSignal.Add(1)
@@ -339,10 +315,12 @@ func (node *Node) HandleRequestVoteRPC(args RequestVoteArgs) error {
 	return nil
 }
 
-func (node *Node) HandleAppendEntriesRPC(args AppendEntriesArgs) error {
+func (node *Node) HandleAppendEntriesRPC(currentNextIndex, receiverId int, args AppendEntriesArgs) error {
 	DebuggerLog("Node %v: HandleAppendEntriesRPC Receive AppendEntries from %v: %+v", node.id, args.LeaderID, args)
 	appendEntriesOp := &AppendEntriesOp{
-		args: args,
+		currentNextIndex: currentNextIndex,
+		receiverId:       receiverId,
+		args:             args,
 	}
 	node.appendEntriesOpCh <- appendEntriesOp
 	DebuggerLog("Node %v: HandleAppendEntriesRPC end", node.id)
@@ -381,6 +359,8 @@ func (node *Node) handleLeaderSendHeartbeatTicker() {
 		return
 	}
 
+	node.savedCurrentTerm = node.volatileStateInfo.CurrentTerm
+
 	args := AppendEntriesArgs{
 		Term:     node.volatileStateInfo.CurrentTerm,
 		LeaderID: node.id,
@@ -388,7 +368,24 @@ func (node *Node) handleLeaderSendHeartbeatTicker() {
 
 	go func(args AppendEntriesArgs) {
 		for _, peerId := range node.peers {
-			node.networkInterface.AppendEntries(peerId, args)
+			currentNextIndex := node.nextIndex[peerId]
+			prevLogIndex := currentNextIndex - 1
+			prevLogTerm := -1
+			if prevLogIndex >= 0 {
+				prevLogTerm = node.log[prevLogIndex].Term
+			}
+			entries := node.log[currentNextIndex:]
+
+			args := AppendEntriesArgs{
+				Term:         node.savedCurrentTerm,
+				LeaderID:     node.id,
+				PrevLogIndex: prevLogIndex,
+				PrevLogTerm:  prevLogTerm,
+				Entries:      entries,
+				LeaderCommit: node.commitIndex,
+			}
+
+			node.networkInterface.AppendEntries(currentNextIndex, peerId, args)
 		}
 	}(args)
 }
@@ -492,4 +489,40 @@ func (node *Node) handleReportToCluster() {
 		node.networkInterface.reportReplyCh <- reportReply
 		node.networkInterface.readyForNewIncomingReport.Done()
 	}()
+}
+
+func (node *Node) handleHeartbeat(op *AppendEntriesReplyOp) {
+	reply := op.reply
+	peerId := op.receiverId
+
+	if node.volatileStateInfo.State == Leader && node.savedCurrentTerm == reply.Term {
+		if reply.Success {
+			node.nextIndex[peerId] = op.currentNextIndex + op.currentLogEntriesLength
+			node.matchIndex[peerId] = node.nextIndex[peerId] - 1
+			DebuggerLog("AppendEntries reply from Node %d success: currentNextIndex := %v, matchIndex := %v", peerId, node.nextIndex, node.matchIndex)
+
+			savedCommitIndex := node.commitIndex
+			for i := node.commitIndex + 1; i < len(node.log); i++ {
+				if node.log[i].Term == node.volatileStateInfo.CurrentTerm {
+					matchCount := 1
+					for _, peerId := range node.peers {
+						if node.matchIndex[peerId] >= i {
+							matchCount++
+						}
+					}
+					if matchCount*2 > len(node.peers)+1 {
+						node.commitIndex = i
+					}
+				}
+			}
+			if node.commitIndex != savedCommitIndex {
+				DebuggerLog("leader sets commitIndex := %d", node.commitIndex)
+				// TODO: notify the client
+				// node.newCommitReadyChan <- struct{}{}
+			}
+		} else {
+			node.nextIndex[peerId] = op.currentNextIndex - 1
+			DebuggerLog("AppendEntries reply from %d !success: currentNextIndex := %d", peerId, op.currentNextIndex-1)
+		}
+	}
 }

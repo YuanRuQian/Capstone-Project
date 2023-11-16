@@ -24,6 +24,9 @@ type Cluster struct {
 	allNodesAreReadyForIncomingSignal sync.WaitGroup
 	readyForNewIncomingReport         *sync.WaitGroup
 
+	commitChs []chan CommitEntry
+	commits   [][]CommitEntry
+
 	reportReplyCh chan *ReportReply
 
 	n int
@@ -36,6 +39,8 @@ func MakeNewCluster(t *testing.T, n int) *Cluster {
 	ns := make([]*NetworkInterface, n)
 	connected := make([]bool, n)
 	ready := make(chan interface{})
+	commitChs := make([]chan CommitEntry, n)
+	commits := make([][]CommitEntry, n)
 	readyForNewIncomingReport := sync.WaitGroup{}
 	reportReplyCh := make(chan *ReportReply, n)
 
@@ -48,7 +53,8 @@ func MakeNewCluster(t *testing.T, n int) *Cluster {
 			}
 		}
 
-		ns[i] = MakeNewNetworkInterface(i, peerIds, ready, &sync.WaitGroup{}, &readyForNewIncomingReport, reportReplyCh)
+		commitChs[i] = make(chan CommitEntry)
+		ns[i] = MakeNewNetworkInterface(i, peerIds, ready, commitChs[i], &sync.WaitGroup{}, &readyForNewIncomingReport, reportReplyCh)
 		ns[i].Serve()
 	}
 
@@ -66,7 +72,7 @@ func MakeNewCluster(t *testing.T, n int) *Cluster {
 	}
 	close(ready)
 
-	return &Cluster{
+	cluster := &Cluster{
 		cluster:                           ns,
 		connected:                         connected,
 		allNodesAreReadyForIncomingSignal: sync.WaitGroup{},
@@ -74,63 +80,71 @@ func MakeNewCluster(t *testing.T, n int) *Cluster {
 		reportReplyCh:                     reportReplyCh,
 		n:                                 n,
 		t:                                 t,
+		commitChs:                         commitChs,
+		commits:                           commits,
 	}
+
+	for i := 0; i < n; i++ {
+		go cluster.collectCommits(i)
+	}
+
+	return cluster
 }
 
 // Shutdown shuts down all the servers in the harness and waits for them to
 // stop running.
-func (c *Cluster) Shutdown() {
-	for i := 0; i < c.n; i++ {
-		c.cluster[i].DisconnectAll()
-		c.connected[i] = false
+func (cluster *Cluster) Shutdown() {
+	for i := 0; i < cluster.n; i++ {
+		cluster.cluster[i].DisconnectAll()
+		cluster.connected[i] = false
 	}
-	for i := 0; i < c.n; i++ {
-		go c.cluster[i].Shutdown()
+	for i := 0; i < cluster.n; i++ {
+		go cluster.cluster[i].Shutdown()
 	}
 }
 
 // DisconnectPeer disconnects a networkInterface from all other servers in the cluster.
-func (c *Cluster) DisconnectPeer(id int) {
+func (cluster *Cluster) DisconnectPeer(id int) {
 	DebuggerLog("Disconnect Node %d", id)
-	c.cluster[id].DisconnectAll()
-	for j := 0; j < c.n; j++ {
+	cluster.cluster[id].DisconnectAll()
+	for j := 0; j < cluster.n; j++ {
 		if j != id {
-			err := c.cluster[j].DisconnectPeer(id)
+			err := cluster.cluster[j].DisconnectPeer(id)
 			if err != nil {
 				panic(err)
 			}
 		}
 	}
-	c.connected[id] = false
+	cluster.connected[id] = false
 }
 
 // ReconnectPeer connects a networkInterface to all other servers in the cluster.
-func (c *Cluster) ReconnectPeer(id int) {
+func (cluster *Cluster) ReconnectPeer(id int) {
 	DebuggerLog("Reconnect Node %d", id)
-	for j := 0; j < c.n; j++ {
+	for j := 0; j < cluster.n; j++ {
 		if j != id {
-			if err := c.cluster[id].ConnectToPeer(j, c.cluster[j].server); err != nil {
+			if err := cluster.cluster[id].ConnectToPeer(j, cluster.cluster[j].server); err != nil {
 				DebuggerLog("ReconnectPeer Node %d: %v", id, err)
 			}
-			if err := c.cluster[j].ConnectToPeer(id, c.cluster[id].server); err != nil {
+			if err := cluster.cluster[j].ConnectToPeer(id, cluster.cluster[id].server); err != nil {
 				DebuggerLog("ReconnectPeer Node %d: %v", j, err)
 			}
 		}
 	}
-	c.connected[id] = true
+	cluster.connected[id] = true
 }
 
 // CheckSingleLeader checks that only a single networkInterface thinks it's the leader.
 // Returns the leader's id and term. It retries several times if no leader is
 // identified yet.
-func (c *Cluster) CheckSingleLeader() (int, int) {
-	for r := 0; r < c.n*10; r++ {
+func (cluster *Cluster) CheckSingleLeader() (int, int) {
+	for r := 0; r < cluster.n*10; r++ {
 		leaderId := -1
 		leaderTerm := -1
-		for i := 0; i < c.n; i++ {
-			if c.connected[i] {
-				c.cluster[i].server.node.Report()
-				reportReply := <-c.reportReplyCh
+		for i := 0; i < cluster.n; i++ {
+			if cluster.connected[i] {
+				cluster.cluster[i].server.node.Report()
+				reportReply := <-cluster.reportReplyCh
 				term := reportReply.term
 				isLeader := reportReply.isLeader
 				DebuggerLog("CheckSingleLeader: networkInterface %d term %d isLeader %v", i, term, isLeader)
@@ -140,7 +154,7 @@ func (c *Cluster) CheckSingleLeader() (int, int) {
 						leaderTerm = term
 					} else {
 						if leaderTerm == term {
-							c.t.Fatalf("both %d and %d think they're leaders during term %d", leaderId, i, term)
+							cluster.t.Fatalf("both %d and %d think they're leaders during term %d", leaderId, i, term)
 						} else {
 							// update the leaderId to the one with the higher term
 							if leaderTerm < term {
@@ -164,16 +178,23 @@ func (c *Cluster) CheckSingleLeader() (int, int) {
 }
 
 // CheckNoLeader checks that no connected networkInterface considers itself the leader.
-func (c *Cluster) CheckNoLeader() {
-	for i := 0; i < c.n; i++ {
-		if c.connected[i] {
-			c.cluster[i].server.node.Report()
-			reportReply := <-c.reportReplyCh
+func (cluster *Cluster) CheckNoLeader() {
+	for i := 0; i < cluster.n; i++ {
+		if cluster.connected[i] {
+			cluster.cluster[i].server.node.Report()
+			reportReply := <-cluster.reportReplyCh
 			isLeader := reportReply.isLeader
 			DebuggerLog("CheckNoLeader: networkInterface %d isLeader %v", i, isLeader)
 			if isLeader {
 				DebuggerLog("networkInterface %d leader; want none", i)
 			}
 		}
+	}
+}
+
+func (cluster *Cluster) collectCommits(id int) {
+	for c := range cluster.commitChs[id] {
+		DebuggerLog("collectCommits(%d) got %+v", id, c)
+		cluster.commits[id] = append(cluster.commits[id], c)
 	}
 }
