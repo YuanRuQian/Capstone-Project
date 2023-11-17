@@ -35,6 +35,9 @@ type Cluster struct {
 	t *testing.T
 }
 
+// TODO: finish the phase 1 for reports. Send back first draft next week.
+// TODO: send command to any node in the cluster, not just the leader, crash in the middle of a command, etc.
+
 // MakeNewCluster creates a new test Cluster, initialized with n servers connected
 // to each other.
 func MakeNewCluster(t *testing.T, n int) *Cluster {
@@ -199,11 +202,14 @@ func (cluster *Cluster) CheckNoLeader() {
 	}
 }
 
+// collectCommits This function will stop when the channel is closed.
 func (cluster *Cluster) collectCommits(id int) {
+	DebuggerLog("collectCommits(%d) start", id)
 	for c := range cluster.commitChs[id] {
 		DebuggerLog("collectCommits(%d) got %+v", id, c)
 		cluster.commits[id] = append(cluster.commits[id], c)
 	}
+	DebuggerLog("collectCommits(%d) end", id)
 }
 
 func (cluster *Cluster) CheckCommitted(cmd int) (nc int, index int) {

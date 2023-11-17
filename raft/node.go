@@ -427,6 +427,7 @@ func (node *Node) handleAppendEntriesReply(op *AppendEntriesReplyOp) {
 	if node.volatileStateInfo.State == Dead {
 		return
 	}
+	
 	DebuggerLog("Node %d : AppendEntries: %+v", node.id, op.args)
 
 	if op.args.Term > node.volatileStateInfo.CurrentTerm {
