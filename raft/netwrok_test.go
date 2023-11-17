@@ -74,8 +74,9 @@ func TestElectionLeaderAndAnotherDisconnect(t *testing.T) {
 	cluster.CheckSingleLeader()
 }
 
-// FIXME: still got leader not found errors sometimes
 func TestDisconnectAllThenRestore(t *testing.T) {
+	startPProfServer()
+
 	cluster := MakeNewCluster(t, 3)
 	defer cluster.Shutdown()
 
@@ -95,8 +96,9 @@ func TestDisconnectAllThenRestore(t *testing.T) {
 	cluster.CheckSingleLeader()
 }
 
-// FIXME: still got leader not found errors sometimes
 func TestElectionLeaderDisconnectThenReconnect(t *testing.T) {
+	startPProfServer()
+
 	cluster := MakeNewCluster(t, 3)
 	defer cluster.Shutdown()
 	origLeaderId, _ := cluster.CheckSingleLeader()
@@ -117,4 +119,22 @@ func TestElectionLeaderDisconnectThenReconnect(t *testing.T) {
 	if againTerm != newTerm {
 		t.Errorf("again term got %d; want %d", againTerm, newTerm)
 	}
+}
+
+func TestCommitOneCommand(t *testing.T) {
+	startPProfServer()
+
+	cluster := MakeNewCluster(t, 3)
+	defer cluster.Shutdown()
+
+	origLeaderId, _ := cluster.CheckSingleLeader()
+
+	tlog("Cluster submitting 42 to %d", origLeaderId)
+	isLeader := cluster.SubmitToServer(origLeaderId, 42)
+	if !isLeader {
+		t.Errorf("Cluster want id=%d leader, but it's not", origLeaderId)
+	}
+
+	sleepWithMilliseconds(150)
+	cluster.CheckCommittedN(42, 3)
 }

@@ -13,6 +13,7 @@ type ReportReply struct {
 }
 
 type Cluster struct {
+	mutex sync.Mutex // Lock to protect shared access to this peer's state
 	// cluster is a list of all the raft servers participating in a cluster.
 	cluster []*NetworkInterface
 
@@ -27,7 +28,8 @@ type Cluster struct {
 	commitChs []chan CommitEntry
 	commits   [][]CommitEntry
 
-	reportReplyCh chan *ReportReply
+	reportReplyCh        chan *ReportReply
+	commandSubmitReplyCh chan bool
 
 	n int
 	t *testing.T
@@ -43,6 +45,7 @@ func MakeNewCluster(t *testing.T, n int) *Cluster {
 	commits := make([][]CommitEntry, n)
 	readyForNewIncomingReport := sync.WaitGroup{}
 	reportReplyCh := make(chan *ReportReply, n)
+	commandSubmitReplyCh := make(chan bool)
 
 	// Create all Servers in this cluster, assign ids and peer ids.
 	for i := 0; i < n; i++ {
@@ -54,7 +57,7 @@ func MakeNewCluster(t *testing.T, n int) *Cluster {
 		}
 
 		commitChs[i] = make(chan CommitEntry)
-		ns[i] = MakeNewNetworkInterface(i, peerIds, ready, commitChs[i], &sync.WaitGroup{}, &readyForNewIncomingReport, reportReplyCh)
+		ns[i] = MakeNewNetworkInterface(i, peerIds, ready, commitChs[i], &sync.WaitGroup{}, &readyForNewIncomingReport, reportReplyCh, commandSubmitReplyCh)
 		ns[i].Serve()
 	}
 
@@ -82,6 +85,7 @@ func MakeNewCluster(t *testing.T, n int) *Cluster {
 		t:                                 t,
 		commitChs:                         commitChs,
 		commits:                           commits,
+		commandSubmitReplyCh:              commandSubmitReplyCh,
 	}
 
 	for i := 0; i < n; i++ {
@@ -100,6 +104,9 @@ func (cluster *Cluster) Shutdown() {
 	}
 	for i := 0; i < cluster.n; i++ {
 		go cluster.cluster[i].Shutdown()
+	}
+	for i := 0; i < cluster.n; i++ {
+		close(cluster.commitChs[i])
 	}
 }
 
@@ -197,4 +204,91 @@ func (cluster *Cluster) collectCommits(id int) {
 		DebuggerLog("collectCommits(%d) got %+v", id, c)
 		cluster.commits[id] = append(cluster.commits[id], c)
 	}
+}
+
+func (cluster *Cluster) CheckCommitted(cmd int) (nc int, index int) {
+	cluster.mutex.Lock()
+	defer cluster.mutex.Unlock()
+
+	// Find the length of the commits slice for connected servers.
+	commitsLen := -1
+	for i := 0; i < cluster.n; i++ {
+		if cluster.connected[i] {
+			if commitsLen >= 0 {
+				// If this was set already, expect the new length to be the same.
+				if len(cluster.commits[i]) != commitsLen {
+					DebuggerLog("Cluster commits[%d] = %d, commitsLen = %d", i, cluster.commits[i], commitsLen)
+				}
+			} else {
+				commitsLen = len(cluster.commits[i])
+			}
+		}
+	}
+
+	for c := 0; c < commitsLen; c++ {
+		cmdAtC := -1
+		for i := 0; i < cluster.n; i++ {
+			if cluster.connected[i] {
+				cmdOfN := cluster.commits[i][c].Command.(int)
+				if cmdAtC >= 0 {
+					if cmdOfN != cmdAtC {
+						DebuggerLog("Cluster got %d, want %d at h.commits[%d][%d]", cmdOfN, cmdAtC, i, c)
+					}
+				} else {
+					cmdAtC = cmdOfN
+				}
+			}
+		}
+		if cmdAtC == cmd {
+			// Check consistency of Index.
+			index := -1
+			nc := 0
+			for i := 0; i < cluster.n; i++ {
+				if cluster.connected[i] {
+					if index >= 0 && cluster.commits[i][c].Index != index {
+						DebuggerLog("Cluster got Index=%d, want %d at h.commits[%d][%d]", cluster.commits[i][c].Index, index, i, c)
+					} else {
+						index = cluster.commits[i][c].Index
+						DebuggerLog("Cluster got Index=%d", index)
+					}
+					nc++
+				}
+			}
+			return nc, index
+		}
+	}
+
+	// If there's no early return, we haven't found the command we were looking
+	// for.
+	cluster.t.Errorf("Cluster cmd=%d not found in commits", cmd)
+	return -1, -1
+}
+
+func (cluster *Cluster) CheckCommittedN(cmd int, n int) {
+	nc, _ := cluster.CheckCommitted(cmd)
+	if nc != n {
+		cluster.t.Errorf("CheckCommittedN got nc=%d, want %d", nc, n)
+	}
+}
+
+func (cluster *Cluster) CheckNotCommitted(cmd int) {
+	cluster.mutex.Lock()
+	defer cluster.mutex.Unlock()
+
+	for i := 0; i < cluster.n; i++ {
+		if cluster.connected[i] {
+			for c := 0; c < len(cluster.commits[i]); c++ {
+				gotCmd := cluster.commits[i][c].Command.(int)
+				if gotCmd == cmd {
+					DebuggerLog("Cluster found %d at commits[%d][%d], expected none", cmd, i, c)
+				}
+			}
+		}
+	}
+}
+
+func (cluster *Cluster) SubmitToServer(serverId int, cmd interface{}) bool {
+	DebuggerLog("Cluster SubmitToServer(%d, %+v)", serverId, cmd)
+	cluster.cluster[serverId].server.node.Submit(cmd)
+	return <-cluster.commandSubmitReplyCh
 }

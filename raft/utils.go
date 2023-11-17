@@ -30,3 +30,10 @@ func tlog(format string, a ...interface{}) {
 func sleepWithMilliseconds(n int) {
 	time.Sleep(time.Duration(n) * time.Millisecond)
 }
+
+func MinInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}

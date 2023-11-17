@@ -31,12 +31,13 @@ type NetworkInterface struct {
 	allNodesAreReadyForIncomingSignal *sync.WaitGroup
 	readyForNewIncomingReport         *sync.WaitGroup
 
-	reportReplyCh chan *ReportReply
+	reportReplyCh        chan *ReportReply
+	commandSubmitReplyCh chan bool
 
 	hasBeenShutdown bool
 }
 
-func MakeNewNetworkInterface(serverId int, peerIds []int, ready <-chan interface{}, commitCh chan<- CommitEntry, allNodesAreReadyForIncomingSignal, readyForNewIncomingReport *sync.WaitGroup, reportReplyCh chan *ReportReply) *NetworkInterface {
+func MakeNewNetworkInterface(serverId int, peerIds []int, ready <-chan interface{}, commitCh chan<- CommitEntry, allNodesAreReadyForIncomingSignal, readyForNewIncomingReport *sync.WaitGroup, reportReplyCh chan *ReportReply, commandSubmitReplyCh chan bool) *NetworkInterface {
 	return &NetworkInterface{
 		serverId:                          serverId,
 		peerIds:                           peerIds,
@@ -48,6 +49,7 @@ func MakeNewNetworkInterface(serverId int, peerIds []int, ready <-chan interface
 		reportReplyCh:                     reportReplyCh,
 		hasBeenShutdown:                   true,
 		commitCh:                          commitCh,
+		commandSubmitReplyCh:              commandSubmitReplyCh,
 	}
 }
 

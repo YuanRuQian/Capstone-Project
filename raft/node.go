@@ -52,6 +52,7 @@ type Node struct {
 	nextIndex                         map[int]int
 	matchIndex                        map[int]int
 	commitCh                          chan<- CommitEntry
+	commitCommandCh                   chan interface{}
 	newCommitReadyCh                  chan struct{}
 }
 
@@ -85,6 +86,7 @@ func MakeNewNode(id int, peers []int, server *NetworkInterface, isReadyToRun <-c
 		matchIndex:                        make(map[int]int),
 		commitCh:                          commitCh,
 		newCommitReadyCh:                  make(chan struct{}, 16),
+		commitCommandCh:                   make(chan interface{}),
 	}
 
 	allNodesAreReadyForIncomingSignal.Add(1)
@@ -119,19 +121,29 @@ func (node *Node) run() {
 			startTime := time.Now()
 
 			select {
+			case command := <-node.commitCommandCh:
+				node.handleCommitCommand(command)
+				DebuggerLog("Node %v: handle commit command in main loop", node.id)
+				node.printElapsedTime("handleCommitCommand", startTime)
+
+			case <-node.newCommitReadyCh:
+				node.handleNewCommitReady()
+				DebuggerLog("Node %v: end of handleNewCommitReady", node.id)
+				node.printElapsedTime("handleNewCommitReady", startTime)
+
 			case <-node.reportToClusterOpCh:
 				node.handleReportToCluster()
-				DebuggerLog("Node %v: enf of handleReportToCluster", node.id)
+				DebuggerLog("Node %v: end of handleReportToCluster", node.id)
 				node.printElapsedTime("handleReportToCluster", startTime)
 
 			case <-node.electionStatusCheckerTicker.C:
 				node.handleElectionStatusCheck()
-				DebuggerLog("Node %v: enf of handleElectionStatusCheck", node.id)
+				DebuggerLog("Node %v: end of handleElectionStatusCheck", node.id)
 				node.printElapsedTime("handleElectionStatusCheck", startTime)
 
 			case <-leaderSendHeartbeatTicker.C:
 				node.handleLeaderSendHeartbeatTicker()
-				DebuggerLog("Node %v: enf of handleLeaderSendHeartbeatTicker", node.id)
+				DebuggerLog("Node %v: end of handleLeaderSendHeartbeatTicker", node.id)
 				node.printElapsedTime("handleLeaderSendHeartbeatTicker", startTime)
 
 			case stopOp := <-node.stopOpCh:
@@ -139,7 +151,7 @@ func (node *Node) run() {
 				leaderSendHeartbeatTicker.Stop()
 				node.electionStatusCheckerTicker.Stop()
 				isRunning = false
-				DebuggerLog("Node %v: enf of handleStopRunning", node.id)
+				DebuggerLog("Node %v: end of handleStopRunning", node.id)
 				node.printElapsedTime("handleStopRunning", startTime)
 
 			case appendEntriesOp := <-node.appendEntriesOpCh:
@@ -178,7 +190,7 @@ func (node *Node) printElapsedTime(operation string, startTime time.Time) {
 	DebuggerLog("Node %v: %s took %s", node.id, operation, elapsed)
 
 	// Append the result to the timestamp.csv file
-	go node.writeToTimestampFile(operation, elapsed)
+	// go node.writeToTimestampFile(operation, elapsed)
 }
 
 func (node *Node) writeToTimestampFile(operation string, elapsed time.Duration) {
@@ -328,6 +340,7 @@ func (node *Node) HandleAppendEntriesRPC(currentNextIndex, receiverId int, args 
 func (node *Node) handleStopRunning(op *StopOp) {
 	DebuggerLog("Node %v: run stopOpCh", node.id)
 	node.volatileStateInfo.State = Dead
+	close(node.newCommitReadyCh)
 	op.reply <- true
 }
 
@@ -408,9 +421,72 @@ func (node *Node) handleAppendEntriesReply(op *AppendEntriesReplyOp) {
 
 	if op.args.isHeartbeat() {
 		node.handleHeartbeat(op)
+		return
 	}
 
-	// TODO: handle non heartbeat append entries reply
+	if node.volatileStateInfo.State == Dead {
+		return
+	}
+	DebuggerLog("Node %d : AppendEntries: %+v", node.id, op.args)
+
+	if op.args.Term > node.volatileStateInfo.CurrentTerm {
+		DebuggerLog("... term out of date in AppendEntries")
+		node.transitionToFollower(op.args.Term)
+	}
+
+	op.reply.Success = false
+	if op.args.Term == node.volatileStateInfo.CurrentTerm {
+		if node.volatileStateInfo.State != Follower {
+			node.transitionToFollower(op.args.Term)
+		}
+		node.volatileStateInfo.LastElectionReset = time.Now()
+
+		// Does our log contain an entry at PrevLogIndex whose term matches
+		// PrevLogTerm? Note that in the extreme case of PrevLogIndex=-1 this is
+		// vacuously true.
+		if op.args.PrevLogIndex == -1 ||
+			(op.args.PrevLogIndex < len(node.log) && op.args.PrevLogTerm == node.log[op.args.PrevLogIndex].Term) {
+			op.reply.Success = true
+
+			// Find an insertion point - where there's a term mismatch between
+			// the existing log starting at PrevLogIndex+1 and the new entries sent
+			// in the RPC.
+			logInsertIndex := op.args.PrevLogIndex + 1
+			newEntriesIndex := 0
+			for {
+				if logInsertIndex >= len(node.log) || newEntriesIndex >= len(op.args.Entries) {
+					break
+				}
+				if node.log[logInsertIndex].Term != op.args.Entries[newEntriesIndex].Term {
+					break
+				}
+				logInsertIndex++
+				newEntriesIndex++
+			}
+			// At the end of this loop:
+			// - logInsertIndex points at the end of the log, or an index where the
+			//   term mismatches with an entry from the leader
+			// - newEntriesIndex points at the end of Entries, or an index where the
+			//   term mismatches with the corresponding log entry
+			if newEntriesIndex < len(op.args.Entries) {
+				DebuggerLog("Node %d: inserting entries %v from index %d", node.id, op.args.Entries[newEntriesIndex:], logInsertIndex)
+				node.log = append(node.log[:logInsertIndex], op.args.Entries[newEntriesIndex:]...)
+				DebuggerLog("Node %d: ... log is now: %v", node.id, node.log)
+			}
+
+			// Set commit index.
+			if op.args.LeaderCommit > node.commitIndex {
+				node.commitIndex = MinInt(op.args.LeaderCommit, len(node.log)-1)
+				DebuggerLog("Node %d: ... setting commitIndex=%d", node.id, node.commitIndex)
+				node.newCommitReadyCh <- struct{}{}
+			}
+
+			// TODO: send reply back to leader
+		}
+	}
+
+	op.reply.Term = node.volatileStateInfo.CurrentTerm
+	DebuggerLog("Node %d: AppendEntries reply: %+v", node.id, op.reply)
 }
 
 func (node *Node) handleRequestVoteReply(op *RequestVoteReplyOp) {
@@ -504,12 +580,49 @@ func (node *Node) handleHeartbeat(op *AppendEntriesReplyOp) {
 			}
 			if node.commitIndex != savedCommitIndex {
 				DebuggerLog("leader sets commitIndex := %d", node.commitIndex)
-				// TODO: notify the client
-				// node.newCommitReadyCh <- struct{}{}
+				node.newCommitReadyCh <- struct{}{}
 			}
 		} else {
 			node.nextIndex[peerId] = op.currentNextIndex - 1
 			DebuggerLog("AppendEntries reply from %d !success: currentNextIndex := %d", peerId, op.currentNextIndex-1)
 		}
 	}
+}
+
+func (node *Node) handleNewCommitReady() {
+	for range node.newCommitReadyCh {
+		// Find which entries we have to apply.
+		savedTerm := node.volatileStateInfo.CurrentTerm
+		savedLastApplied := node.lastApplied
+		var entries []LogEntry
+		if node.commitIndex > node.lastApplied {
+			entries = node.log[node.lastApplied+1 : node.commitIndex+1]
+			node.lastApplied = node.commitIndex
+		}
+
+		DebuggerLog("Node %d: commitChanSender entries=%v, savedLastApplied=%d", node.id, entries, savedLastApplied)
+
+		for i, entry := range entries {
+			node.commitCh <- CommitEntry{
+				Command: entry.Command,
+				Index:   savedLastApplied + i + 1,
+				Term:    savedTerm,
+			}
+		}
+	}
+}
+
+func (node *Node) Submit(command interface{}) {
+	DebuggerLog("Node %d: Submit received by %v: %v", node.id, node.volatileStateInfo.State, command)
+	node.commitCommandCh <- command
+}
+
+func (node *Node) handleCommitCommand(command interface{}) {
+	if node.volatileStateInfo.State == Leader {
+		node.log = append(node.log, LogEntry{Command: command, Term: node.volatileStateInfo.CurrentTerm})
+		DebuggerLog("Node %d: ... log=%v", node.id, node.log)
+		node.networkInterface.commandSubmitReplyCh <- true
+		return
+	}
+	node.networkInterface.commandSubmitReplyCh <- false
 }
