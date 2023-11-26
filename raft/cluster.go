@@ -35,7 +35,6 @@ type Cluster struct {
 	t *testing.T
 }
 
-// TODO: finish the phase 1 for reports. Send back first draft next week.
 // TODO: send command to any node in the cluster, not just the leader, crash in the middle of a command, etc.
 
 // MakeNewCluster creates a new test Cluster, initialized with n servers connected
@@ -204,10 +203,11 @@ func (cluster *Cluster) CheckNoLeader() {
 
 // collectCommits This function will stop when the channel is closed.
 func (cluster *Cluster) collectCommits(id int) {
-	DebuggerLog("collectCommits(%d) start", id)
 	for c := range cluster.commitChs[id] {
+		cluster.mutex.Lock()
 		DebuggerLog("collectCommits(%d) got %+v", id, c)
 		cluster.commits[id] = append(cluster.commits[id], c)
+		cluster.mutex.Unlock()
 	}
 	DebuggerLog("collectCommits(%d) end", id)
 }
@@ -231,6 +231,7 @@ func (cluster *Cluster) CheckCommitted(cmd int) (nc int, index int) {
 		}
 	}
 
+	// check commits consistency
 	for c := 0; c < commitsLen; c++ {
 		cmdAtC := -1
 		for i := 0; i < cluster.n; i++ {
@@ -294,7 +295,7 @@ func (cluster *Cluster) CheckNotCommitted(cmd int) {
 }
 
 func (cluster *Cluster) SubmitToServer(serverId int, cmd interface{}) bool {
-	DebuggerLog("Cluster SubmitToServer(%d, %+v)", serverId, cmd)
-	cluster.cluster[serverId].server.node.Submit(cmd)
+	DebuggerLog("Cluster submit %+v to server %d", cmd, serverId)
+	cluster.cluster[serverId].server.node.ReceiveCommand(cmd)
 	return <-cluster.commandSubmitReplyCh
 }

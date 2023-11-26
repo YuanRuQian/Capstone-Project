@@ -104,6 +104,7 @@ func (networkInterface *NetworkInterface) ConnectToPeer(peerId int, server *Serv
 	networkInterface.mu.Lock()
 	defer networkInterface.mu.Unlock()
 	if networkInterface.peerServers[peerId] == nil {
+		DebuggerLog(fmt.Sprintf("NetworkInterface %v connect to peer %v, set server", networkInterface.serverId, peerId))
 		networkInterface.peerServers[peerId] = server
 	}
 	return nil
@@ -157,7 +158,7 @@ func (networkInterface *NetworkInterface) AppendEntries(currentNextIndex, receiv
 		return
 	}
 
-	err := networkInterface.peerServers[receiverId].node.HandleAppendEntriesRPC(currentNextIndex, receiverId, args)
+	err := networkInterface.peerServers[receiverId].node.HandleAppendEntriesRPC(currentNextIndex, args)
 	if err != nil {
 		panic(fmt.Sprintf("Error in AppendEntries RPC: %v", err))
 	}
@@ -165,7 +166,7 @@ func (networkInterface *NetworkInterface) AppendEntries(currentNextIndex, receiv
 
 func (networkInterface *NetworkInterface) SendAppendEntriesReply(currentNextIndex, replierId, destinationId int, args AppendEntriesArgs, reply AppendEntriesReply) {
 	if hasBeenShutdown := networkInterface.prePRCShutdownCheck(); hasBeenShutdown {
-		DebuggerLog(fmt.Sprintf("NetworkInterface %v has been shutdown, no more SendAppendEntriesReply", networkInterface.serverId))
+		DebuggerLog(fmt.Sprintf("NetworkInterface %v has been shutdown, failed pre-check, no more SendAppendEntriesReply", networkInterface.serverId))
 		return
 	}
 
@@ -176,7 +177,7 @@ func (networkInterface *NetworkInterface) SendAppendEntriesReply(currentNextInde
 		return
 	}
 
-	networkInterface.peerServers[destinationId].node.HandleAppendEntriesReplyRPC(replierId, args, reply)
+	networkInterface.peerServers[destinationId].node.HandleAppendEntriesReplyRPC(currentNextIndex, replierId, args, reply)
 }
 
 func (networkInterface *NetworkInterface) SendRequestVoteReply(replierId, destinationId int, reply RequestVoteReply) {

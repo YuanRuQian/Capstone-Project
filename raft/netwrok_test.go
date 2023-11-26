@@ -129,12 +129,13 @@ func TestCommitOneCommand(t *testing.T) {
 
 	origLeaderId, _ := cluster.CheckSingleLeader()
 
-	tlog("Cluster submitting 42 to %d", origLeaderId)
+	DebuggerLog("Cluster submitting 42 to Leader Node %d", origLeaderId)
 	isLeader := cluster.SubmitToServer(origLeaderId, 42)
+
 	if !isLeader {
 		t.Errorf("Cluster want id=%d leader, but it's not", origLeaderId)
 	}
 
-	sleepWithMilliseconds(150)
+	sleepWithMilliseconds(500)
 	cluster.CheckCommittedN(42, 3)
 }

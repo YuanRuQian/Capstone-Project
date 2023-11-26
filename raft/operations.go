@@ -11,6 +11,7 @@ type RequestVoteOp struct {
 type AppendEntriesOp struct {
 	args             AppendEntriesArgs
 	receiverId       int
+	senderId         int
 	currentNextIndex int
 }
 
@@ -45,11 +46,10 @@ type StopOp struct {
 }
 
 type AppendEntriesReplyOp struct {
-	args                    AppendEntriesArgs
-	reply                   AppendEntriesReply
-	receiverId              int
-	currentNextIndex        int
-	currentLogEntriesLength int
+	args             AppendEntriesArgs
+	reply            AppendEntriesReply
+	receiverId       int
+	currentNextIndex int
 }
 
 type AppendEntriesReply struct {
