@@ -139,21 +139,224 @@ func TestElectionLeaderDisconnectThenReconnect(t *testing.T) {
 	}
 }
 
-func TestCommitOneCommand(t *testing.T) {
+func TestCommitOneCommandWithLeader(t *testing.T) {
 	startPProfServer()
 
 	cluster := MakeNewCluster(t, 3)
 	defer cluster.Shutdown()
 
-	origLeaderId, _ := cluster.CheckSingleLeader()
+	leaderId, _ := cluster.CheckSingleLeader()
 
-	DebuggerLog("Cluster submitting 42 to Leader Node %d", origLeaderId)
-	isLeader := cluster.SubmitToServer(origLeaderId, 42)
+	DebuggerLog("Cluster submitting 42 to Leader Node %d", leaderId)
+	isLeader := cluster.SubmitToServer(leaderId, 42)
 
 	if !isLeader {
-		t.Errorf("Cluster want id=%d leader, but it's not", origLeaderId)
+		t.Errorf("Cluster want id=%d leader, but it's not", leaderId)
 	}
 
 	sleepWithMilliseconds(500)
 	cluster.CheckCommittedN(42, 3)
+}
+
+func TestSubmitNonLeaderFails(t *testing.T) {
+	startPProfServer()
+
+	size := 5
+	cluster := MakeNewCluster(t, size)
+	defer cluster.Shutdown()
+
+	leaderId, _ := cluster.CheckSingleLeader()
+	nonLeaderNodeId := (leaderId + 1) % size
+	DebuggerLog("Cluster submitting 42 to Non Leader Node %d", leaderId)
+	isLeader := cluster.SubmitToServer(nonLeaderNodeId, 42)
+	if isLeader {
+		t.Errorf("Cluster want Non Leader Node %d, but it is leader", nonLeaderNodeId)
+	}
+}
+
+func TestCommitMultipleCommands(t *testing.T) {
+	startPProfServer()
+
+	size := 5
+	cluster := MakeNewCluster(t, size)
+	defer cluster.Shutdown()
+
+	leaderId, _ := cluster.CheckSingleLeader()
+
+	values := []int{42, 55, 81}
+	for _, v := range values {
+		DebuggerLog("Cluster submitting %v to Leader Node %d", v, leaderId)
+		isLeader := cluster.SubmitToServer(leaderId, v)
+		if !isLeader {
+			t.Errorf("Cluster want Leader Node %d, but it is not a leader", leaderId)
+		}
+		sleepWithMilliseconds(100)
+	}
+
+	sleepWithMilliseconds(150)
+	nc, i1 := cluster.CheckCommitted(42)
+	_, i2 := cluster.CheckCommitted(55)
+	if nc != size {
+		t.Errorf("Cluster want nc=%d, got %d", size, nc)
+	}
+	if i1 >= i2 {
+		t.Errorf("Cluster want i1<i2, got i1=%d i2=%d", i1, i2)
+	}
+
+	_, i3 := cluster.CheckCommitted(81)
+	if i2 >= i3 {
+		t.Errorf("Cluster want i2<i3, got i2=%d i3=%d", i2, i3)
+	}
+}
+
+func TestCommitWithPeerDisconnectionAndRecover(t *testing.T) {
+	startPProfServer()
+
+	size := 3
+	cluster := MakeNewCluster(t, size)
+	defer cluster.Shutdown()
+
+	leaderId, _ := cluster.CheckSingleLeader()
+
+	values := []int{42, 55, 81}
+
+	for _, v := range values {
+		DebuggerLog("Cluster submitting %v to Leader Node %d", v, leaderId)
+		isLeader := cluster.SubmitToServer(leaderId, v)
+		if !isLeader {
+			t.Errorf("Cluster want Leader Node %d, but it is not a leader", leaderId)
+		}
+		sleepWithMilliseconds(100)
+	}
+
+	sleepWithMilliseconds(500)
+
+	for _, v := range values {
+		cluster.CheckCommittedN(v, size)
+	}
+
+	peerId := (leaderId + 1) % size
+	cluster.DisconnectPeer(peerId)
+	sleepWithMilliseconds(250)
+
+	newVal := 21
+
+	cluster.SubmitToServer(leaderId, newVal)
+	sleepWithMilliseconds(250)
+	cluster.CheckCommittedN(newVal, size-1)
+
+	cluster.ReconnectPeer(peerId)
+	sleepWithMilliseconds(200)
+	cluster.CheckSingleLeader()
+
+	sleepWithMilliseconds(150)
+	cluster.CheckCommittedN(newVal, size)
+}
+
+func TestCommitsWithLeaderDisconnects(t *testing.T) {
+	startPProfServer()
+
+	size := 5
+
+	cluster := MakeNewCluster(t, size)
+	defer cluster.Shutdown()
+
+	oldLeaderId, _ := cluster.CheckSingleLeader()
+
+	values := []int{42, 55}
+	for _, v := range values {
+		cluster.SubmitToServer(oldLeaderId, v)
+	}
+
+	sleepWithMilliseconds(150)
+
+	for _, v := range values {
+		cluster.CheckCommittedN(v, size)
+	}
+
+	cluster.DisconnectPeer(oldLeaderId)
+	sleepWithMilliseconds(150)
+
+	newVal1 := 21
+	cluster.SubmitToServer(oldLeaderId, newVal1)
+
+	sleepWithMilliseconds(150)
+	cluster.CheckNotCommitted(newVal1)
+
+	newLeaderId, _ := cluster.CheckSingleLeader()
+
+	newVal2 := 22
+
+	cluster.SubmitToServer(newLeaderId, newVal2)
+	sleepWithMilliseconds(150)
+	cluster.CheckCommittedN(newVal2, size-1)
+
+	cluster.ReconnectPeer(oldLeaderId)
+	sleepWithMilliseconds(500)
+
+	finalLeaderId, _ := cluster.CheckSingleLeader()
+	if finalLeaderId == oldLeaderId {
+		t.Errorf("Cluster got finalLeaderId==oldLeaderId==%d, yet want them different", finalLeaderId)
+	}
+
+	newVal3 := 23
+	cluster.SubmitToServer(newLeaderId, newVal3)
+	sleepWithMilliseconds(300)
+	cluster.CheckCommittedN(newVal3, size)
+	cluster.CheckCommittedN(newVal2, size)
+	cluster.CheckNotCommitted(newVal1)
+}
+
+func TestNoCommitWithNoQuorum(t *testing.T) {
+	startPProfServer()
+
+	size := 3
+
+	cluster := MakeNewCluster(t, size)
+	defer cluster.Shutdown()
+
+	values := []int{42, 55, 81}
+	ogLeaderId, ogTerm := cluster.CheckSingleLeader()
+
+	for _, v := range values {
+		cluster.SubmitToServer(ogLeaderId, v)
+	}
+
+	sleepWithMilliseconds(300)
+	for _, v := range values {
+		cluster.CheckCommittedN(v, size)
+	}
+
+	peer1 := (ogLeaderId + 1) % size
+	peer2 := (ogLeaderId + 2) % size
+	cluster.DisconnectPeer(peer1)
+	cluster.DisconnectPeer(peer2)
+	sleepWithMilliseconds(250)
+
+	newVal1 := 21
+	cluster.SubmitToServer(ogLeaderId, newVal1)
+	sleepWithMilliseconds(250)
+	cluster.CheckNotCommitted(newVal1)
+
+	cluster.ReconnectPeer(peer1)
+	cluster.ReconnectPeer(peer2)
+	sleepWithMilliseconds(600)
+
+	cluster.CheckNotCommitted(newVal1)
+
+	newLeaderId, newTerm := cluster.CheckSingleLeader()
+	if ogTerm == newTerm {
+		t.Errorf("Cluster got ogTerm==newTerm==%d; but want them different", ogTerm)
+	}
+
+	newValues := []int{22, 23, 24}
+	for _, v := range newValues {
+		cluster.SubmitToServer(newLeaderId, v)
+	}
+
+	sleepWithMilliseconds(350)
+
+	for _, v := range newValues {
+		cluster.CheckCommittedN(v, size)
+	}
 }

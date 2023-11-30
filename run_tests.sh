@@ -58,7 +58,32 @@ IsDebugMode=$IsDebugMode go test -race -v -run TestElectionLeaderDisconnectThenR
 
 #for ((i=1; i<=50; i++))
 #do
-IsDebugMode=$IsDebugMode go test -race -v -run TestCommitOneCommand -bench=. -cpuprofile=cpu.pprof -memprofile=mem.pprof
+IsDebugMode=$IsDebugMode go test -race -v -run TestCommitOneCommandWithLeader -bench=. -cpuprofile=cpu.pprof -memprofile=mem.pprof
+#done
+
+#for ((i=1; i<=50; i++))
+#do
+IsDebugMode=$IsDebugMode go test -race -v -run TestSubmitNonLeaderFails -bench=. -cpuprofile=cpu.pprof -memprofile=mem.pprof
+#done
+
+#for ((i=1; i<=50; i++))
+#do
+IsDebugMode=$IsDebugMode go test -race -v -run TestCommitMultipleCommands -bench=. -cpuprofile=cpu.pprof -memprofile=mem.pprof
+#done
+
+#for ((i=1; i<=50; i++))
+#do
+IsDebugMode=$IsDebugMode go test -race -v -run TestCommitWithPeerDisconnectionAndRecover -bench=. -cpuprofile=cpu.pprof -memprofile=mem.pprof
+#done
+
+#for ((i=1; i<=50; i++))
+#do
+IsDebugMode=$IsDebugMode go test -race -v -run TestCommitsWithLeaderDisconnects -bench=. -cpuprofile=cpu.pprof -memprofile=mem.pprof
+#done
+
+#for ((i=1; i<=50; i++))
+#do
+IsDebugMode=$IsDebugMode go test -race -v -run TestNoCommitWithNoQuorum -bench=. -cpuprofile=cpu.pprof -memprofile=mem.pprof
 #done
 
 # Open the browser with the pprof URL
