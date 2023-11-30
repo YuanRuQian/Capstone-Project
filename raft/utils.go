@@ -22,11 +22,13 @@ func getElectionTimeout(min, max int) time.Duration {
 	return time.Duration(getRandomInt(min, max)) * time.Millisecond
 }
 
-func tlog(format string, a ...interface{}) {
-	format = "[TEST] " + format
-	log.Printf(format, a...)
-}
-
 func sleepWithMilliseconds(n int) {
 	time.Sleep(time.Duration(n) * time.Millisecond)
+}
+
+func MinInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
