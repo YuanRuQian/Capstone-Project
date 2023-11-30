@@ -212,6 +212,25 @@ func (cluster *Cluster) collectCommits(id int) {
 	DebuggerLog("collectCommits(%d) end", id)
 }
 
+func (cluster *Cluster) CheckIfLogsInOrder(expectedOrder []int) bool {
+	cluster.mutex.Lock()
+	defer cluster.mutex.Unlock()
+
+	for i := 0; i < cluster.n; i++ {
+		if cluster.connected[i] {
+			for c := 0; c < len(cluster.commits[i]); c++ {
+				gotCmd := cluster.commits[i][c].Command.(int)
+				if gotCmd != expectedOrder[c] {
+					DebuggerLog("Cluster found %d at commits[%d][%d], expected %d", gotCmd, i, c, expectedOrder[c])
+					return false
+				}
+			}
+		}
+	}
+
+	return true
+}
+
 func (cluster *Cluster) CheckCommitted(cmd int) (nc int, index int) {
 	cluster.mutex.Lock()
 	defer cluster.mutex.Unlock()

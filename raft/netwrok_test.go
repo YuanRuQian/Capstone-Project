@@ -147,8 +147,9 @@ func TestCommitOneCommandWithLeader(t *testing.T) {
 
 	leaderId, _ := cluster.CheckSingleLeader()
 
-	DebuggerLog("Cluster submitting 42 to Leader Node %d", leaderId)
-	isLeader := cluster.SubmitToServer(leaderId, 42)
+	value := 42
+	DebuggerLog("Cluster submitting %d to Leader Node %d", value, leaderId)
+	isLeader := cluster.SubmitToServer(leaderId, value)
 
 	if !isLeader {
 		t.Errorf("Cluster want id=%d leader, but it's not", leaderId)
@@ -156,6 +157,8 @@ func TestCommitOneCommandWithLeader(t *testing.T) {
 
 	sleepWithMilliseconds(500)
 	cluster.CheckCommittedN(42, 3)
+
+	cluster.CheckIfLogsInOrder([]int{value})
 }
 
 func TestSubmitNonLeaderFails(t *testing.T) {
@@ -167,11 +170,15 @@ func TestSubmitNonLeaderFails(t *testing.T) {
 
 	leaderId, _ := cluster.CheckSingleLeader()
 	nonLeaderNodeId := (leaderId + 1) % size
-	DebuggerLog("Cluster submitting 42 to Non Leader Node %d", leaderId)
-	isLeader := cluster.SubmitToServer(nonLeaderNodeId, 42)
+
+	value := 42
+	DebuggerLog("Cluster submitting %d to Non Leader Node %d", value, leaderId)
+	isLeader := cluster.SubmitToServer(nonLeaderNodeId, value)
 	if isLeader {
 		t.Errorf("Cluster want Non Leader Node %d, but it is leader", nonLeaderNodeId)
 	}
+
+	cluster.CheckIfLogsInOrder([]int{})
 }
 
 func TestCommitMultipleCommands(t *testing.T) {
@@ -194,18 +201,24 @@ func TestCommitMultipleCommands(t *testing.T) {
 	}
 
 	sleepWithMilliseconds(150)
-	nc, i1 := cluster.CheckCommitted(42)
-	_, i2 := cluster.CheckCommitted(55)
-	if nc != size {
-		t.Errorf("Cluster want nc=%d, got %d", size, nc)
-	}
-	if i1 >= i2 {
-		t.Errorf("Cluster want i1<i2, got i1=%d i2=%d", i1, i2)
+
+	areLogsInOrder := cluster.CheckIfLogsInOrder(values)
+
+	if !areLogsInOrder {
+		t.Errorf("Cluster want logs in order, but they are not")
 	}
 
-	_, i3 := cluster.CheckCommitted(81)
-	if i2 >= i3 {
-		t.Errorf("Cluster want i2<i3, got i2=%d i3=%d", i2, i3)
+	prevI := -1
+
+	for _, v := range values {
+		nc, i := cluster.CheckCommitted(v)
+		if nc != size {
+			t.Errorf("Cluster want nc=%d, got %d", size, nc)
+		}
+		if prevI >= i {
+			t.Errorf("Cluster want prevI<i, got prevI=%d i=%d", prevI, i)
+		}
+		prevI = i
 	}
 }
 
@@ -251,6 +264,8 @@ func TestCommitWithPeerDisconnectionAndRecover(t *testing.T) {
 
 	sleepWithMilliseconds(150)
 	cluster.CheckCommittedN(newVal, size)
+
+	cluster.CheckIfLogsInOrder([]int{42, 55, 81, 21})
 }
 
 func TestCommitsWithLeaderDisconnects(t *testing.T) {
@@ -305,6 +320,8 @@ func TestCommitsWithLeaderDisconnects(t *testing.T) {
 	cluster.CheckCommittedN(newVal3, size)
 	cluster.CheckCommittedN(newVal2, size)
 	cluster.CheckNotCommitted(newVal1)
+
+	cluster.CheckIfLogsInOrder([]int{42, 55, 22, 23})
 }
 
 func TestNoCommitWithNoQuorum(t *testing.T) {
@@ -359,4 +376,6 @@ func TestNoCommitWithNoQuorum(t *testing.T) {
 	for _, v := range newValues {
 		cluster.CheckCommittedN(v, size)
 	}
+
+	cluster.CheckIfLogsInOrder([]int{42, 55, 81, 22, 23, 24})
 }
