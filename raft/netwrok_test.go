@@ -4,17 +4,35 @@ package raft
 // see the content at: http://localhost:6060/debug/pprof/goroutine?debug=2
 
 import (
+	"fmt"
+	"net"
 	"net/http"
 	_ "net/http/pprof"
 	"testing"
 )
 
-func startPProfServer() {
-	go func() {
-		err := http.ListenAndServe("localhost:6060", nil)
+// findAvailablePort find an available port on localhost
+func findAvailablePort() string {
+	listener, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		panic(err)
+	}
+	defer func(listener net.Listener) {
+		err := listener.Close()
 		if err != nil {
 			panic(err)
-			return
+		}
+	}(listener)
+	return fmt.Sprintf("localhost:%d", listener.Addr().(*net.TCPAddr).Port)
+}
+
+func startPProfServer() {
+	port := findAvailablePort()
+	fmt.Printf("[TEST] Starting pprof server at %s\n", port)
+	go func() {
+		err := http.ListenAndServe(port, nil)
+		if err != nil {
+			panic(err)
 		}
 	}()
 }

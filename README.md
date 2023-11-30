@@ -17,4 +17,4 @@ A Fault-Tolerant Key/Value Storage System with Raft Consensus Algorithm
 ./run_tests.sh
 ```
 
-Then go to your browser at http://localhost:6060/debug/pprof/goroutine?debug=2 to see the goroutine stack dump.
+Then go to your browser at [http://localhost:{port}/debug/pprof/goroutine?debug=2](http://localhost:{port}/debug/pprof/goroutine?debug=2) to see the goroutine stack dump.
