@@ -1,6 +1,10 @@
 # Capstone-Project
 
-A Fault-Tolerant Key/Value Storage System with Raft Consensus Algorithm
+A Raft Consensus Algorithm Implementation in Golang
+
+- Phase 1 ( Done ): Leader Election
+- Phase 2 ( Done ): Log Replication
+- Phase 3 ( TODO ): Data Persistence
 
 ## Run Tests & See Goroutine Stack Dump
 
